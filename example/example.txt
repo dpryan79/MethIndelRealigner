@@ -1,0 +1,15 @@
+Alignment:
+	15 total reads analysed
+	15 reads mapped (100.00%).
+
+Number of hits aligning to each of the orientations:
+	15	100.00%	OT (original top strand)
+	0	  0.00%	OB (original bottom strand)
+
+Cytosine Methylation (N.B., statistics from overlapping mates are added together!):
+	Number of C's in a CpG context: 124
+	Percentage of methylated C's in a CpG context: 100.00%
+	Number of C's in a CHG context: 64
+	Percentage of methylated C's in a CHG context: 100.00%
+	Number of C's in a CHH context: 110
+	Percentage of methylated C's in a CHH context: 100.00%
