@@ -6,7 +6,7 @@ A set of programs to attempt local methylation-aware realignment around indels. 
 
 This package uses [SSW](http://www.plosone.org/article/info%3Adoi%2F10.1371%2Fjournal.pone.0082138) to perform the actual alignments. All credit for speed should go to its authors.
 
-Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C implementation is from [Peter Scott][https://github.com/PeterScott/murmur3] and MurmurHash itself is by [Austin Appleby][https://code.google.com/p/smhasher/wiki/MurmurHash3]. Both of these are in the public domain.
+Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C implementation is from [Peter Scott](https://github.com/PeterScott/murmur3) and MurmurHash itself is by [Austin Appleby](https://code.google.com/p/smhasher/wiki/MurmurHash3). Both of these are in the public domain.
 
 To Do
 =====
