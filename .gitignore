@@ -1,0 +1,5 @@
+*.o
+*.sam
+Realigner
+TargetCreator
+example/bisulfite_genome
