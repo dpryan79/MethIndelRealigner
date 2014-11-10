@@ -15,3 +15,4 @@ To Do
  * Move part of realigner.c to a different file
  * Add examples and actual documentation to the README.md
  * Use a bloom filter to hold visited nodes during graph DFS traversal
+ * The Makefile shouldn't have my local settings hard coded! Mention needing htslib (or just make it a submodule).

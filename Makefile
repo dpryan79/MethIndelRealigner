@@ -1,4 +1,3 @@
-#Please see the tutorial (http://sourceforge.net/projects/dna-bison/files/bison_tutorial.tar.gz/download) for help in setting these options.
 PREFIX = /home/ryand/bin
 INCLUDE_DIRS = /home/ryand/include
 LIB_DIRS = /home/ryand/lib
