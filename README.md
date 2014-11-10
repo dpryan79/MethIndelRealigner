@@ -1,3 +1,5 @@
+Note: This isn't even beta quality yet. I don't recommend using it for anything serious at the moment!
+
 A set of programs to attempt local methylation-aware realignment around indels. This would be most useful in cases where one is performing some type of BS-seq on a human and wants to decrease incorrect methylation calls due to indel-induced misalignments.
 
 This package uses SSW (http://www.plosone.org/article/info%3Adoi%2F10.1371%2Fjournal.pone.0082138) to perform the actual alignments. All credit for speed should go to its authors.

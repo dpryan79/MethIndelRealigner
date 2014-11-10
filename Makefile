@@ -3,7 +3,7 @@ PREFIX = /home/ryand/bin
 INCLUDE_DIRS = /home/ryand/include
 LIB_DIRS = /home/ryand/lib
 CC = gcc
-OPTS = -Wall -g -DDEBUG
+OPTS = -Wall -g #-DDEBUG
 
 OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o SSW/ssw.o
 
