@@ -30,32 +30,34 @@ void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap) {
 }
 
 //Export
-alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap) {
-    alignmentHeap *new = alignmentHeap_init(1000); //CHANGE ME!
+alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int depth) {
     int cur_i = 0;
     bam1_t *b = heap->heap[0];
-    int32_t lpos = -1;
+    int32_t lpos = -1, newl = 0;
     InDel reg;
 
     if(lastTargetNode == NULL) {
         writeHeap(of, hdr, heap);
-        return new;
+        heap->l = 0;
+        return heap;
     }
+    heap->start = lastTargetNode->start;
+    heap->end = lastTargetNode->end;
     if(lastTargetNode->tid != heap->heap[0]->core.tid) {
         writeHeap(of, hdr, heap);
-        return new;
+        heap->l = 0;
+        return heap;
     }
     reg.tid = b->core.tid;
     reg.start = b->core.pos;
-    reg.end = bam_endpos(b)+1;
-    while(TargetNodeCmp(&reg, lastTargetNode) != 0) {
+    reg.end = bam_endpos(b)-1;
+    while(reg.end < lastTargetNode->start) {
         sam_write1(of, hdr, b);
         bam_destroy1(heap->heap[cur_i++]);
         //We hit the end of the heap before the next ROI
         if(cur_i >= heap->l) {
-            free(heap->heap);
-            free(heap);
-            return new;
+            heap->l = 0;
+            return heap;
         }
         b = heap->heap[cur_i];
         reg.tid = b->core.tid;
@@ -66,15 +68,14 @@ alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap)
     //Keep sort order, processing reads with same start pos
     while(b->core.pos == lpos) {
         if(TargetNodeCmp(&reg, lastTargetNode) == 0) {
-            new->heap[new->l++] = b;
+            heap->heap[newl++] = b;
         } else {
             sam_write1(of, hdr, b);
             bam_destroy1(b);
         }
         if(++cur_i >= heap->l) {
-            free(heap->heap);
-            free(heap);
-            return new;
+            heap->l = 0;
+            return heap;
         }
         b = heap->heap[cur_i];
         reg.tid = b->core.tid;
@@ -82,9 +83,11 @@ alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap)
         reg.end = bam_endpos(b)+1;
     }
     //Transfer the remainder over
-    for(;cur_i < heap->l; cur_i++) new->heap[new->l++] = heap->heap[cur_i];
-    free(heap->heap);
-    free(heap);
+    for(;cur_i < heap->l; cur_i++) heap->heap[newl++] = heap->heap[cur_i];
+    heap->l = newl;
+#ifdef DEBUG
+    fprintf(stderr, "[writeHeapUntil] Returning a heap of length %" PRId32 "\n", newl); fflush(stderr);
+#endif
 
-    return new;
+    return heap;
 }

@@ -1,10 +1,6 @@
-#include <zlib.h>
 #include "realigner.h"
-#include "htslib/kseq.h"
 #include "htslib/faidx.h"
 #include "SSW/ssw.h"
-
-KSTREAM_INIT(gzFile, gzread, 4096)
 
 char int2base[32] = {0, 'A', 'T', 0, 'G', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N', \
                      0, 'A', 'C', 0, 'A', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N'};
@@ -15,18 +11,16 @@ int8_t scoreMatrix[16] = { 2,-2,-2, 0,
                           -2,-2, 2, 0,
                            0, 0, 0, 0};
 
-struct bounds {
-    int32_t tid, start, end;
-};
-
 //This is basically calculate_positions() from bison
 //The output must be free()d
 int32_t * bam2positions(bam1_t *b) {
     int32_t *positions, i = 0, j = 0;
-    positions = malloc(sizeof(int32_t) * b->core.l_qseq);
     uint32_t *cigar = bam_get_cigar(b);
     int32_t prev = b->core.pos;
     int op, op_len, offset=0;
+
+    positions = calloc(b->core.l_qseq, sizeof(int32_t));
+    assert(positions);
 
     for(i=0; i<b->core.n_cigar; i++) {
         op=bam_cigar_op(cigar[i]);
@@ -36,7 +30,8 @@ int32_t * bam2positions(bam1_t *b) {
         case 7 : //=
         case 8 : //X
             for(j=0; j<op_len; j++) {
-                *(positions+offset) = prev++;
+                assert(offset<b->core.l_qseq);
+                positions[offset] = prev++;
                 offset++;
             }
             break;
@@ -44,7 +39,8 @@ int32_t * bam2positions(bam1_t *b) {
         case 4 : //S
             //Assign the previous position
             for(j=0; j<op_len; j++) {
-                *(positions+offset) = prev;
+                assert(offset<b->core.l_qseq);
+                positions[offset] = prev;
                 offset++;
             }
             break;
@@ -117,33 +113,69 @@ int getStrand(bam1_t *b) {
 void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *ks, char *CT, char *GA, int32_t refLen) {
     int i, start2, end2;
     int offset = (getStrand(b) & 1) ? 0 : 16;
-    int32_t *positions; //Could reuse this like a kstring_t
+    int32_t *positions = NULL; //Could reuse this like a kstring_t
     int32_t refStart = (start-k>=0) ? start-k : 0;
     int32_t refEnd = refStart+refLen-1;
     uint64_t h;
 #ifdef DEBUG
     char *tmp = calloc(k+1, sizeof(char));
+    fprintf(stderr, "[bam2kmer] endpos is %"PRId32"\n", bam_endpos(b));
 #endif
 
     positions = bam2positions(b);
-    findPositions(positions, b->core.l_qseq, start, end, &start2, &end2);
+    findPositions(positions, b->core.l_qseq, start, end-1, &start2, &end2);
+    if(start2==-1) {
+        free(positions);
+        return;
+    }
+    //Does this even overlap the ROI?
+    if(positions[start2]-refStart+end2-start2+1 <= 2*k) {
+#ifdef DEBUG
+        fprintf(stderr, "[bam2kmer] %s with bounds %"PRId32"-%"PRId32" doesn't overlap ROI from %"PRId32"-%"PRId32"\n", bam_get_qname(b), b->core.pos, bam_endpos(b), start,end);
+#endif
+        free(positions);
+        return;
+    }
+#ifdef DEBUG
+    fprintf(stderr, "[bam2kmer] positions[start2] %"PRId32" start %"PRId32"\n", positions[start2], start);
+    fprintf(stderr, "[bam2kmer] positions[end2] %"PRId32" end %"PRId32"\n", positions[end2], end);
+#endif
 
     //Grow ks as needed
-    if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1)
-        ks_resize(ks, (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1);
-    ks->l = (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1;
+    if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart))
+        ks_resize(ks, (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart));
+    ks->l = (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart);
 
     //Add 5' reference sequence
+#ifdef DEBUG
+    fprintf(stderr, "[bam2kmer] copying first %"PRId32" chars onto 5' end\n", positions[start2]-refStart);
+#endif
     if(positions[start2]-refStart) {
         if(offset==0) strncpy(ks->s, CT, positions[start2]-refStart);
         else strncpy(ks->s, GA, positions[start2]-refStart);
     }
+    ks->s[positions[start2]-refStart] = '\0';
+#ifdef DEBUG
+    fprintf(stderr, "[bam2kmer] adding read from base %"PRId32" through %"PRId32" inclusive\n", start2, end2);
+    fprintf(stderr, "[bam2kmer] %s\n", ks->s);
+#endif
 
     //Extract the C->T and G->A sequences
-    for(i=start2; i<=end2; i++)
+    for(i=start2; i<=end2; i++) {
         ks->s[positions[start2]-refStart+i-start2] = int2base[offset+bam_seqi(bam_get_seq(b), i)];
+    }
+    ks->s[ks->l] = '\0';
+#ifdef DEBUG
+    ks->s[positions[start2]-refStart+i-start2] = '\0';
+    fprintf(stderr, "[bam2kmer] %s\n", ks->s);
+    fprintf(stderr, "[bam2kmer] Length should be %" PRId64"\n", ks->l);
+#endif
 
     //Add 3' reference sequence
+#ifdef DEBUG
+    fprintf(stderr, "[bam2kmer] Copying over the last %"PRId32"\n", refEnd-positions[end2]);
+    assert(refEnd-positions[end2] < end-start);
+#endif
     if(refEnd-positions[end2]) {
         if(offset==0) strncpy(ks->s+positions[start2]-refStart+end2-start2+1,
                               CT+refLen-refEnd+positions[end2],
@@ -152,13 +184,12 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
                      GA+refLen-refEnd+positions[end2],
                      refEnd-positions[end2]);
     }
-    ks->s[ks->l] = '\0';
 #ifdef DEBUG
     fprintf(stderr, "[bam2kmer] Final read sequence %s\n", ks->s); fflush(stderr);
 #endif
 
-    //Add the kmers
-    for(i=0; i<ks->l-k; i++) {
+    //Add the kmers, ignoring the first and last
+    for(i=1; i<ks->l-k; i++) {
         h = hash_seq(ks->s+i, k);
 #ifdef DEBUG
         snprintf(tmp, k+1, "%s", ks->s+i);
@@ -254,17 +285,19 @@ int8_t *char2int(char *seq, int len) {
 }
 
 //Given a set of alignments and a score, return the alignment with that score with the highest count
-int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts) {
+//Return -1 if there is no best alignment, which will result in the read not being realigned (we should mark these)
+int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts, int32_t readLen) {
     int32_t best=-1, bestScore = -1, i;
     uint32_t bestCount = 0;
 
     //Get the maximum score
     for(i=0; i<len; i++)
-        if(al[i]->score1 > bestScore && al[i]->cigarLen == 1) bestScore = al[i]->score1;
+        if(al[i]->score1 > bestScore && al[i]->cigarLen == 1 && readLen == al[i]->read_end1-al[i]->read_begin1)
+            bestScore = al[i]->score1;
 
     //Given a score, find the path with the highest count
     for(i=0; i<len; i++) {
-        if(al[i]->score1 == bestScore && counts[i] > bestCount) {
+        if(al[i]->score1 == bestScore && counts[i] > bestCount && al[i]->cigarLen == 1 && readLen == al[i]->read_end1-al[i]->read_begin1) {
             bestCount = counts[i];
             best = i;
         }
@@ -332,13 +365,15 @@ void updateCigar(bam1_t *b, int32_t *arr, int len) {
                 kputc(bam_cigar_opchr(cigar[i]), str);
             }
             bam_aux_append(b, "OC", 'Z', str->l+1, (uint8_t*) str->s);
+            free(str->s);
+            free(str);
         }
     }
 
     //Do we need to move everything after the cigar?
-    if(b->core.n_cigar < len) {
+    if(b->core.n_cigar != len) {
         //Do we need to realloc b->data?
-        if(b->m_data-b->l_data > 4*(len-b->core.n_cigar)) {
+        if(b->m_data-b->l_data < 4*(len-b->core.n_cigar)) {
             b->m_data++;
             kroundup32(b->m_data);
             b->data = realloc(b->data, b->m_data*sizeof(uint8_t));
@@ -374,10 +409,14 @@ refEndPos	0-based position in the reference that denotes the 3'-most base used i
 bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t readEndPos, int32_t refStartPos, int32_t refStart, int32_t refEndPos) {
     int32_t *newCIGARArray = malloc(sizeof(uint32_t) * b->core.n_cigar);
     int n_cigar = 0, max_cigar = b->core.n_cigar, read_cigar_opnum = 0, ref_cigar_opnum = 0;
-    int32_t oplen = 0, op,oplen2=0, op2=0, readPos = 0, newStartPos = -1;
-    int32_t i, refPos = 0;
+    int32_t oplen = 0, op=0,oplen2=0, op2=0, readPos = 0, newStartPos = -1;
+    int32_t refPos = 0;
+#ifdef DEBUG
+    int32_t i;
+#endif
 
     assert(newCIGARArray);
+    assert(readEndPos-readStartPos == refEndPos-refStartPos);
 
     /* We deal with things in 4 segments:
      * (1) read 5' overhang
@@ -386,8 +425,10 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
      * (4) read 3' overhang
      * Note that a read 3' underhang can be ignored!
      */
-//    fprintf(stderr, "readStartPos %" PRId32 " readpos %" PRId32 " readEndPos %" PRId32 "\n", readStartPos, readPos, readEndPos);
-//    fprintf(stderr, "refStartPos %" PRId32 "\n", refStartPos);
+#ifdef DEBUG
+    fprintf(stderr, "[updateAlignment] readStartPos %" PRId32 " readpos %" PRId32 " readEndPos %" PRId32 "\n", readStartPos, readPos, readEndPos);
+    fprintf(stderr, "[updateAlignment] refStartPos %" PRId32 "\n", refStartPos);
+#endif
     if(readStartPos > 0) { //5' overhang
         while(readPos < readStartPos) {
             if(oplen == 0) {
@@ -395,16 +436,20 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 oplen = bam_cigar_oplen(bam_get_cigar(b)[read_cigar_opnum++]);
             }
             //If the op consumes the query and extends past the while-loop bounds, then trim
-//            fprintf(stderr, "readPos %" PRId32 " oplen %"PRId32" readStartPos %"PRId32" bam_cigar_type(op) %i\n", readPos, oplen, readStartPos, bam_cigar_type(op));
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] readPos %" PRId32 " oplen %"PRId32" readStartPos %"PRId32" bam_cigar_type(op) %i\n", readPos, oplen, readStartPos, bam_cigar_type(op));
+#endif
             if(readPos + oplen>= readStartPos && (bam_cigar_type(op)&1)) {
                 oplen = readStartPos-readPos;
+                if(bam_cigar_type(op)&1) readPos += oplen;
                 break;
             } else { //Append to newCIGARArray
                 newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op, oplen);
+                if(bam_cigar_type(op)&1) readPos += oplen;
                 oplen = 0;
             }
         }
-        //If refStartPos >0, we need to cat up to it
+        //If refStartPos >0, we need to catch up to it
         if(refStartPos > 0) {
             while(refPos < refStartPos) {
                 if(oplen2 == 0) {
@@ -418,25 +463,33 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 }
             }
         }
-//    fprintf(stderr, "A CIGAR ");
-//    for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
-//    fprintf(stderr, "\n");
+#ifdef DEBUG
+    fprintf(stderr, "[updateAlignment] 5' overhang CIGAR ");
+    for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
+    fprintf(stderr, "\n");
+#endif
     } else if(refStartPos>0) { //5' Underhang, note new start position
         newStartPos = refStart;
-//        fprintf(stderr, "refStart is %" PRId32 " so we start with newStartPos = that\n", refStart);
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] refStart is %" PRId32 " so we start with newStartPos = that\n", refStart);
+#endif
         while(refPos < refStartPos) {
             if(oplen2 == 0) {
                 op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
                 oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum++]);
             }
-//            fprintf(stderr, "refPos %" PRId32 " refStartPos %" PRId32 "\n", refPos, refStartPos);
-//            fprintf(stderr, "oplen %" PRId32 " op %c\n", oplen2, BAM_CIGAR_STR[op2]);
-//            fprintf(stderr, "bam_cigar_type(op) == %i\n", bam_cigar_type(op2));
-//            fflush(stderr);
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] refPos %" PRId32 " refStartPos %" PRId32 "\n", refPos, refStartPos);
+            fprintf(stderr, "[updateAlignment] oplen %" PRId32 " op %c\n", oplen2, BAM_CIGAR_STR[op2]);
+            fprintf(stderr, "[updateAlignment] bam_cigar_type(op) == %i\n", bam_cigar_type(op2));
+            fflush(stderr);
+#endif
             if(refPos + oplen2>= refStartPos && bam_cigar_type(op2)&1) {
                 if(bam_cigar_type(op2) &2) newStartPos += refStartPos;
                 oplen2 = refPos+oplen2-refStartPos;
-//                fprintf(stderr, "Truncating oplen to %" PRId32 "\n", oplen2);
+#ifdef DEBUG
+                fprintf(stderr, "[updateAlignment] Truncating oplen to %" PRId32 "\n", oplen2);
+#endif
                 refPos = refStartPos;
                 break;
             }
@@ -448,26 +501,34 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             }
             oplen2 = 0;
         }
-//    fprintf(stderr, "B CIGAR ");
-//    for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
-//    fprintf(stderr, "\n");
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] 5' underhang CIGAR ");
+        for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
+        fprintf(stderr, "\n");
+#endif
     }
-//    fprintf(stderr, "Remnant CIGAR is %" PRId32 "%c\n", oplen, BAM_CIGAR_STR[op]);
-//    fprintf(stderr, "Remnant CIGAR2 is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
-//    fflush(stderr);
+#ifdef DEBUG
+    fprintf(stderr, "[updateAlignment] Remnant CIGAR is %" PRId32 "%c\n", oplen, BAM_CIGAR_STR[op]);
+    fprintf(stderr, "[updateAlignment] Remnant CIGAR2 is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
+    fflush(stderr);
+    fprintf(stderr, "[updateAlignment] Before overlap region: refPos %" PRId32 " refEndPos %" PRId32 "\n", refPos, refEndPos);
+#endif
 
     //Deal with the overlap region
-//    fprintf(stderr, "refPos %" PRId32 " refEndPos %" PRId32 "\n", refPos, refEndPos);
     while(refPos <= refEndPos) {
         if(oplen2 == 0) {
             op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
             oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum++]);
         }
-//        fprintf(stderr, "1 Found op %"PRId32"%c bam_cigar_type(op2) %i\n", oplen2, BAM_CIGAR_STR[op2], bam_cigar_type(op2));
-//        fprintf(stderr, "1 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] 1 Found op %"PRId32"%c bam_cigar_type(op2) %i\n", oplen2, BAM_CIGAR_STR[op2], bam_cigar_type(op2));
+        fprintf(stderr, "[updateAlignment] 1 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
+#endif
         if(refPos + oplen2>= refEndPos+1 && bam_cigar_type(op2)&1) {
             oplen2 = refEndPos-refPos+1;
-//            fprintf(stderr, "Truncating the operation to length %" PRId32" and breaking\n", oplen2);
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] Truncating the operation to length %" PRId32" and breaking\n", oplen2);
+#endif
             if(oplen) {
                 if(op == op2) {
                     oplen2 += oplen;
@@ -479,53 +540,80 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             break;
         } else { //Append to newCIGARArray
             if(oplen) {
-//                fprintf(stderr, "Comparing %c and %c\n", BAM_CIGAR_STR[op], BAM_CIGAR_STR[op2]);
+#ifdef DEBUG
+                fprintf(stderr, "[updateAlignment] Comparing %c and %c\n", BAM_CIGAR_STR[op], BAM_CIGAR_STR[op2]);
+#endif
                 if(op == op2) {
-//                    fprintf(stderr, "refPos before %" PRId32" ", refPos);
+#ifdef DEBUG
+                    fprintf(stderr, "[updateAlignment] refPos before %" PRId32" ", refPos);
+#endif
                     if(bam_cigar_type(op2) &1) {
                         refPos += oplen2;
                         readPos += oplen2;
                     }
-//                    fprintf(stderr, " and %" PRId32" after\n", refPos);
+#ifdef DEBUG
+                    fprintf(stderr, " and %" PRId32" after\n", refPos);
+#endif
                     oplen2 += oplen;
                 } else newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op, oplen);
                 oplen = 0;
             } else {
                 if(bam_cigar_type(op2) &1) refPos += oplen2;
             }
-//            fprintf(stderr, "pushing %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] pushing %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
+#endif
             newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op2, oplen2);
             oplen2 = 0;
         }
         oplen2 = 0;
-//        fprintf(stderr, "2 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] 2 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
+#endif
     }
-//    fprintf(stderr, "Remnant CIGAR is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
+#ifdef DEBUG
+    fprintf(stderr, "[updateAlignment] Remnant CIGAR is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
+#endif
     oplen = 0;
-//    fprintf(stderr, "C CIGAR ");
-//    for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
-//    fprintf(stderr, "\n");
+#ifdef DEBUG
+    fprintf(stderr, "[updateAlignment] Post-overlap CIGAR ");
+    for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "[updateAlignment] Before 3' overhang, readPos %" PRId32 "readEndPos %" PRId32 " b->core.l_qseq-1 %" PRId32"\n", readPos, readEndPos, b->core.l_qseq-1);
+#endif
 
     //3' Overhang
-//    fprintf(stderr, "Before D, readEndPos %" PRId32 " b->core.l_qseq-1 %" PRId32"\n", readEndPos, b->core.l_qseq-1);
     if(readEndPos < b->core.l_qseq-1) {
         //Iterate up to the relevant CIGAR operation
-        i = 0; //within-read position index
+        oplen = 0;
+        readPos = -1;
         for(read_cigar_opnum=0; read_cigar_opnum<b->core.n_cigar; read_cigar_opnum++) {
             op = bam_cigar_op(bam_get_cigar(b)[read_cigar_opnum]);
             oplen = bam_cigar_oplen(bam_get_cigar(b)[read_cigar_opnum]);
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] Found %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
+#endif
             if(bam_cigar_type(op) & 1) {
-                if(i+oplen>=readEndPos) {
-                    oplen = oplen+i-readEndPos;
+                if(readPos+oplen>readEndPos) {
+                    oplen = oplen+readPos-readEndPos;
+#ifdef DEBUG
+                    fprintf(stderr, "[updateAlignment] Truncating to %"PRId32" due to readPos=%"PRId32" and readEndPos %"PRId32"\n", oplen, readPos, readEndPos);
+#endif
                     readPos += oplen;
+                    read_cigar_opnum++; //Otherwise, the break will prevent this
                     break;
                 }
                 readPos += oplen;
             }
         }
-//        fprintf(stderr, "D CIGAR ");
-//        for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
-//        fprintf(stderr, "\n");
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] read_cigar_opnum %"PRId32"\n", read_cigar_opnum);
+        fprintf(stderr, "[updateAlignment] remnant CIGAR op is %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
+        fprintf(stderr, "[updateAlignment] remnant CIGAR2 op is %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
+        fprintf(stderr, "[updateAlignment] 3' overhang remnant CIGAR ");
+        for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
+        fprintf(stderr, "\n");
+#endif
         //Can we merge this OP with that from the overlap?
         if(oplen2) {
             if(op==op2) {
@@ -535,9 +623,19 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 oplen2 = 0;
             }
         }
-//        fprintf(stderr, "E CIGAR ");
-//        for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
-//        fprintf(stderr, "\n");
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] remnant CIGAR op is %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
+        fprintf(stderr, "[updateAlignment] 3' overhang CIGAR ");
+        for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
+        fprintf(stderr, "\n");
+#endif
+        //Push the remnant CIGAR, if it exists
+        if(oplen) {
+#ifdef DEBUG
+            fprintf(stderr, "[updateAlignment] Pushing remnant %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
+#endif
+            newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op, oplen);
+        }
         //Finish adding the alignment's original OPs
         for(; read_cigar_opnum<b->core.n_cigar; read_cigar_opnum++) {
             op = bam_cigar_op(bam_get_cigar(b)[read_cigar_opnum]);
@@ -556,7 +654,21 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     fflush(stderr);
 #endif
     if(newStartPos != -1) updatePos(b, newStartPos);
+#ifdef DEBUG
+    //Ensure that the new CIGAR string matchs b->core.l_qseq
+    assert(n_cigar>0);
+    oplen2 = 0;
+    for(i=0; i<n_cigar;i++) {
+        op = bam_cigar_op(newCIGARArray[i]);
+        oplen = bam_cigar_oplen(newCIGARArray[i]);
+        if(bam_cigar_type(op)&1) oplen2+=oplen;
+        fprintf(stderr, "[updateAlignment] Found %"PRId32"%c, type %i oplen2 %"PRId32"\n", oplen, BAM_CIGAR_STR[op], bam_cigar_type(op), oplen2);
+    }
+    fflush(stderr);
+    assert(oplen2==b->core.l_qseq);
+#endif
     updateCigar(b, newCIGARArray, n_cigar);
+    free(newCIGARArray);
     return b;
 }
 
@@ -603,10 +715,15 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 
     //extract int8_t * covering the ref
     positions = bam2positions(b);
-    findPositions(positions, b->core.l_qseq, refLBound, refRBound, readLBound, readRBound);
+    findPositions(positions, b->core.l_qseq, refLBound, refRBound-1, readLBound, readRBound);
+    if(*readLBound == -1) { //Read doesn't overlap ROI
+        free(readal);
+        free(positions);
+        return NULL;
+    }
     subreadL = (*readRBound)-(*readLBound)+1;
     if(subreadL >= *subreadM) { //Grow subreadSeq if needed
-        (*subreadM)++;
+        (*subreadM) = subreadL+1;
         kroundup32((*subreadM));
         (*subreadSeq) = realloc((*subreadSeq), sizeof(int8_t) * (*subreadM));
         assert((*subreadSeq));
@@ -629,7 +746,7 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
         for(j=0; j<p->len[i]; j++) fprintf(stderr, "%"PRId8, p->conv[i][j]);
         fprintf(stderr, "\n");
         fprintf(stderr, "[alignReads2Paths] readal[%i]->score1 %" PRIu16 "\n", i, readal[i]->score1);
-        fprintf(stderr, "[alignReads2Paths] readal[%i]->ref_begin1 %" PRId32 " ref_end1 %" PRId32, i, readal[i]->ref_begin1, readal[i]->ref_end1);
+        fprintf(stderr, "[alignReads2Paths] readal[%i]->ref_begin1 %" PRId32 " ref_end1 %" PRId32 "\n", i, readal[i]->ref_begin1, readal[i]->ref_end1);
         fprintf(stderr, "[alignReads2Paths] read_begin1 %" PRId32 " read_end1 %" PRId32 "\n", readal[i]->read_begin1, readal[i]->read_end1);
         fprintf(stderr, "[alignReads2Paths] CIGAR ");
         for(j=0; j<readal[i]->cigarLen; j++) fprintf(stderr, "%" PRIu32 "%c", cigar_int_to_len(readal[i]->cigar[j]), cigar_int_to_op(readal[i]->cigar[j]));
@@ -686,6 +803,9 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     refRBound = refLBound + refLen-2*k;
     for(i=0; i<(*heap)->l; i++) {
         strand = getStrand((*heap)->heap[i]);
+#ifdef DEBUG
+        fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
+#endif
         readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i);
     }
 
@@ -694,6 +814,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     uint32_t *GAcounts = calloc(GApaths->l, sizeof(uint32_t));
     for(i=0; i<(*heap)->l; i++) {
         strand = getStrand((*heap)->heap[i]);
+        if(readal[i] == NULL) continue;
         if(strand==1) countAlignmentsPerPath(readal[i], CTpaths->l, CTcounts);
         else countAlignmentsPerPath(readal[i], GApaths->l, GAcounts);
     }
@@ -706,14 +827,15 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     }
 #endif
 
-    //Pick a best path for each gene given all of the others and update read
+    //Pick a best path for each alignment given all of the others and update it
     refLBound = ((*heap)->start-2*k >= 0) ? (*heap)->start-2*k : 0; //The previous bounds were only for extracting subreads
     for(i=0; i<(*heap)->l; i++) {
         strand = getStrand((*heap)->heap[i]);
+        if(readal[i] == NULL) continue;
         if(strand&1) {
-            bestAl = findBestAlignment(readal[i], CTpaths->l, CTcounts);
+            bestAl = findBestAlignment(readal[i], CTpaths->l, CTcounts, readRBound[i]-readLBound[i]);
         } else {
-            bestAl = findBestAlignment(readal[i], GApaths->l, GAcounts);
+            bestAl = findBestAlignment(readal[i], GApaths->l, GAcounts, readRBound[i]-readLBound[i]);
         }
         //Update read if it aligned to an alternate path!
 #ifdef DEBUG
@@ -730,7 +852,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
                                                readal[i][bestAl]->ref_begin1,
                                                refLBound,
                                                readal[i][bestAl]->ref_end1);
-        else if(refIndex[1] != bestAl)
+        else if(!(strand&1) && refIndex[1] != bestAl)
             (*heap)->heap[i] = updateAlignment((*heap)->heap[i],
                                                GAal[bestAl],
                                                readLBound[i],
@@ -747,6 +869,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     int j;
     for(i=0; i<(*heap)->l; i++) {
         strand = getStrand((*heap)->heap[i]);
+        if(readal[i] == NULL) continue;
         if(strand&1) {
             for(j=0; j<CTpaths->l; j++) align_destroy(readal[i][j]);
         } else {
@@ -757,6 +880,11 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     free(readal);
     for(i=0; i<CTpaths->l; i++) align_destroy(CTal[i]);
     for(i=0; i<GApaths->l; i++) align_destroy(GAal[i]);
+    free(CTal);
+    free(GAal);
+    free(subreadSeq);
+    free(readLBound);
+    free(readRBound);
 }
 
 //k is the kmer
@@ -780,6 +908,8 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     convertCT(CT, len);
     convertGA(GA, len);
 #ifdef DEBUG
+    fprintf(stderr, "[realignHeap] heap->start %"PRId32" heap->end %"PRId32"\n", heap->start, heap->end);
+    fprintf(stderr, "[realignHeap] fetching sequence from %"PRId32"-%"PRId32" of length %i\n", start2, end+k-1,len);
     char *tmp = calloc(k+1, sizeof(char));
     fprintf(stderr, "[realignHeap] C->T reference %s\n", CT);
     fprintf(stderr, "[realignHeap] G->A reference %s\n", GA);
@@ -833,236 +963,4 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     bf_destroy(filter);
     free(CT);
     free(GA);
-}
-
-//Move everything below here to a new file
-
-
-
-
-//Does this really work correctly? The bounds are 0-base semi-open...
-int regionNodeCmp(int32_t tid, int32_t start, int32_t end) {
-    if(tid == lastTargetNode->tid) {
-        if((start <= lastTargetNode->start && end >= lastTargetNode->start) || \
-            (start >= lastTargetNode->start && start <= lastTargetNode->end)) return 0;
-        else if(end < lastTargetNode->start) return end-lastTargetNode->start;
-        assert(start > lastTargetNode->end);
-        return start - lastTargetNode->end;
-    } else return tid - lastTargetNode->tid;
-}
-
-//Does this really work correctly? The bounds are 0-base semi-open...
-int overlapsRegionsCore(int32_t tid, int32_t start, int32_t end) {
-    int direction;
-
-    //The only reliable way to find the 5'-most region is from the left.
-    while(regionNodeCmp(tid,start,end) <= 0) {
-#ifdef DEBUG
-        fprintf(stderr, "[overlapsRegionsCore] Direction %i\n", regionNodeCmp(tid,start,end));
-        fprintf(stderr, "[overlapsRegionsCore] CurPosition  %i:%i-%i\n", (int) tid, (int)start, (int)end);
-        fprintf(stderr, "[overlapsRegionsCore] ListPosition %i:%i-%i\n", (int) lastTargetNode->tid, (int)lastTargetNode->start, (int)lastTargetNode->end);
-        fflush(stderr);
-#endif
-        lastTargetNode = lastTargetNode->prev; //Not sure if this really updates things
-    }
-    while(lastTargetNode->next != NULL) {
-        lastTargetNode = lastTargetNode->next;
-        direction = regionNodeCmp(tid,start,end);
-        if(direction == 0) return 1;
-        else if(direction > 0) return 0;
-    }
-    return 0;
-}
-
-//Does this really work correctly? The bounds are 0-base semi-open...
-struct bounds * overlapsRegion(bam1_t *b) {
-    int32_t tid = b->core.tid;
-    int32_t start = b->core.pos;
-    int32_t end = bam_endpos(b)-1;
-    uint32_t *cigar = bam_get_cigar(b);
-    int i, op, oplen;
-    struct bounds *bounds = NULL;
-
-    //Adjust bounds in the case of soft-clipping
-    for(i=0; i<b->core.n_cigar; i++) {
-        op = bam_cigar_op(cigar[i]);
-        oplen = bam_cigar_oplen(cigar[i]);
-        if(op == 4) {
-            start -= oplen;
-        } else break;
-    }
-    if(start < 0) start = 0;
-
-    if(overlapsRegionsCore(tid, start, end)) {
-        bounds = malloc(sizeof(struct bounds));
-        assert(bounds != NULL);
-        bounds->tid = lastTargetNode->tid;
-        bounds->start = lastTargetNode->start;
-        bounds->end = lastTargetNode->end;
-    }
-    return bounds;
-}
-
-void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai) {
-    bam1_t *b = bam_init1();
-    struct bounds *bounds;
-    alignmentHeap *heap = alignmentHeap_init(1000); //Need to make this an option
-    int status; //1: EOF, 2: heap max, 3: Past ROI
-    InDel reg;
-
-    while(sam_read1(fp, hdr, b) > 0) {
-#ifdef DEBUG
-        fprintf(stderr, "[processReads] Found %s\n", bam_get_qname(b)); fflush(stderr);
-#endif
-        if(!(b->core.flag&4) && (bounds = overlapsRegion(b)) != NULL) {
-#ifdef DEBUG
-            fprintf(stderr, "[processReads] %s in region\n", bam_get_qname(b)); fflush(stderr);
-#endif
-            heap->heap[0] = b;
-            heap->start = bounds->start;
-            heap->end = bounds->end;
-            heap->l = 1;
-            b = bam_init1();
-            assert(b != NULL);
-            free(bounds);
-
-            //We're in an ROI, add to the heap until:
-            // (1) It's too big and we just skip the alignment
-            // (2) We're past the 3' bound of the ROI
-            status = 0;
-inheap:     while(1) {
-                if(sam_read1(fp, hdr, b)<0) {
-                    status = 1;
-                    break;
-                }
-#ifdef DEBUG
-                fprintf(stderr, "[processReads] Found %s while in heap of length %i\n", bam_get_qname(b), heap->l); fflush(stderr);
-                fprintf(stderr, "b->core.pos %" PRId32 " headp->end %" PRId32 "\n", b->core.pos, heap->end);
-#endif
-                if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core.tid) {
-                    //If the alignment and the first in the heap have the same pos...
-                    if(b->core.pos == heap->heap[0]->core.pos) {
-                        reg.tid = b->core.tid;
-                        reg.start = b->core.pos;
-                        reg.end = bam_endpos(b)+1;
-                        if(TargetNodeCmp(&reg, lastTargetNode) != 0) {
-                            sam_write1(of, hdr, b);
-                            continue;
-                        }
-                    }
-                    if(heap->l+1 > heap->m) {
-                        status = 2;
-                        break;
-                    } else {
-                        heap->heap[heap->l++] = b;
-                        b = bam_init1();
-                        assert(b != NULL);
-                    }
-                } else {
-                    status = 3;
-                    break;
-                }
-            }
-
-            //Deal with the 3 possible statuses
-            assert(status != 0);
-            if(status == 1) {
-#ifdef DEBUG
-                fprintf(stderr, "[processReads] Reached end of alignments\n"); fflush(stderr);
-#endif
-                if(heap->l) realignHeap(heap, k, fai);
-#ifdef DEBUG
-                fprintf(stderr, "[processReads] Last heap realigned\n"); fflush(stderr);
-#endif
-                writeHeap(of, hdr, heap);
-                heap->l = 0;
-                break;
-            } else if(status == 2) {
-                fprintf(stderr, "[processReads] Skipping %s:%"PRId32"-%"PRId32", too many reads\n", hdr->target_name[heap->heap[0]->core.tid], heap->start, heap->end);
-            } else {
-#ifdef DEBUG
-                fprintf(stderr, "[processReads] %s is outside the ROI, realigning the heap\n", bam_get_qname(b)); fflush(stderr);
-#endif
-                realignHeap(heap, k, fai);
-            }
-            lastTargetNode = lastTargetNode->next; //Move to the next ROI
-            heap = writeHeapUntil(of, hdr, heap);
-            if(heap->l) {//The heap wasn't flushed
-                goto inheap; //Yeah yeah, I know
-            }
-#ifdef DEBUG
-        } else {
-            fprintf(stderr, "[processReads] %s not in ROI\n", bam_get_qname(b)); fflush(stderr);
-#endif
-        }
-        sam_write1(of, hdr, b);
-    }
-    bam_destroy1(b);
-    alignmentHeap_destroy(heap);
-}
-
-//return -1 on error
-int bed2list(gzFile fp, bam_hdr_t *hdr) {
-    int ret;
-    char *s;
-    InDel *node;
-    kstream_t *kstr = ks_init(fp);
-    kstring_t *ks = calloc(1, sizeof(kstring_t));
-
-    if(ks == NULL) return -1;
-    lastTargetNode = firstTargetNode;
-    while(ks_getuntil(kstr, '\n', ks, &ret) >= 0) {
-        node = calloc(1, sizeof(InDel));
-        if(node == NULL) return -1;
-        s = strtok(ks->s, "\t");
-        node->tid = bam_name2id(hdr, s);
-        s = strtok(NULL, "\t");
-        node->start = strtol(s, NULL, 10);
-        s = strtok(NULL, "\n");
-        node->end = strtoul(s, NULL, 10);
-        insertNode(node);
-    }
-    if(ks->s) free(ks->s);
-    free(ks);
-    ks_destroy(kstr);
-    return 0;
-}
-
-//Stub main
-int main(int argc, char *argv[]) {
-    htsFile *fp, *of;
-    bam_hdr_t *hdr;
-    gzFile bed;
-    faidx_t *fai;
-
-    //Open
-    fp = sam_open(argv[1], "rb"); //Need to include an option to open a fasta file
-    hdr = sam_hdr_read(fp);
-    initTargetNodes();
-    bed = gzopen(argv[2], "rb");
-    assert(bed2list(bed, hdr) == 0); //This should be better handled
-    gzclose(bed);
-    fai = fai_load(argv[3]);
-
-    //Write the output header
-    of = sam_open(argv[4], "wb");
-    sam_hdr_write(of, hdr);
-
-    //Process the reads
-    lastTargetNode = firstTargetNode->next;
-    processReads(fp, hdr, of, 17, fai);
-
-    //Clean up
-    fprintf(stderr, "[main] 1\n"); fflush(stderr);
-    destroyTargetNodes();
-    fprintf(stderr, "[main] 2\n"); fflush(stderr);
-    bam_hdr_destroy(hdr);
-    fprintf(stderr, "[main] 3\n"); fflush(stderr);
-    sam_close(fp);
-    fprintf(stderr, "[main] 4\n"); fflush(stderr);
-    sam_close(of);
-    fprintf(stderr, "[main] 5\n"); fflush(stderr);
-    fai_destroy(fai);
-    fprintf(stderr, "[main] 6\n"); fflush(stderr);
-    return 0;
 }

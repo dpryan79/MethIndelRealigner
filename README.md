@@ -13,9 +13,9 @@ To Do
  * Support multiple threads in the realignHeapCore.
  * Compare time requirements with BisSNP
  * Ensure validity of results on a non-trivial example!!!
- * Allow users to modify the maxmimum depth
- * Move part of realigner.c to a different file
  * Add examples and actual documentation to the README.md
  * Use a bloom filter to hold visited nodes during graph DFS traversal
  * The Makefile shouldn't have my local settings hard coded! Mention needing htslib (or just make it a submodule).
  * Add a license (probably MIT-style)
+ * Run valgrind
+ * There's still a WINDOW constant defined

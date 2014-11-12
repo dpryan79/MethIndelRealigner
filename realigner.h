@@ -1,5 +1,6 @@
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
+#include "htslib/faidx.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -151,7 +152,7 @@ void destroyPaths(paths *p);
 alignmentHeap * alignmentHeap_init(int size);
 void alignmentHeap_destroy(alignmentHeap *heap);
 void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap);
-alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap);
+alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int depth);
 
 //bloomFilter.c
 bf * bf_init(int32_t width, int kmer);
@@ -160,3 +161,5 @@ void bf_reset(bf *bf);
 inline void bf_add(bf *bf, uint64_t hash);
 inline int bf_exists(bf *bf, uint64_t hash);
 uint64_t hash_seq(char *seq, int len);
+
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai);
