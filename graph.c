@@ -70,7 +70,7 @@ void addDFSVertex(vertex **LL, vertex *toAdd) {
     v->h = toAdd->h;
     v->nchar = toAdd->nchar;
     int dir = cmpVertices(*LL, v);
-    assert(dir != 0);
+    if(dir == 0) return; //This can only happen if we hit the same cycle more than once during DFS
 
     if(*LL == NULL) {
         *LL = v;
