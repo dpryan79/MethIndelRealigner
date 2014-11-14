@@ -238,6 +238,9 @@ void appendPath(paths **paths, vertex **stack, int k, char lastChar) {
 #endif
     len += k; //Otherwise, we'll be a k-mer short!
 
+    //If the path length isn't at least 2k+1 in length then it isn't valid
+    if(len <= 2*k+1) return;
+
     seq = malloc((len+1)*sizeof(char));
     assert(seq);
     seq = strcpy(seq, v->seq);
