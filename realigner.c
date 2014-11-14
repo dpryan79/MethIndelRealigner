@@ -411,9 +411,12 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     int n_cigar = 0, max_cigar = b->core.n_cigar, read_cigar_opnum = 0, ref_cigar_opnum = 0;
     int32_t oplen = 0, op=0,oplen2=0, op2=0, readPos = 0, newStartPos = -1;
     int32_t refPos = 0;
-#ifdef DEBUG
+//#ifdef DEBUG
     int32_t i;
-#endif
+//#endif
+    int verbose = 0;
+    if(strcmp(bam_get_qname(b), "PC140529:148:D0KVLACXX:6:1101:6878:130513") == 0) verbose=1;
+    if(strcmp(bam_get_qname(b), "PC140529:148:D0KVLACXX:6:2107:4949:98668") == 0) verbose=1;
 
     assert(newCIGARArray);
     assert(readEndPos-readStartPos == refEndPos-refStartPos);
@@ -425,20 +428,25 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
      * (4) read 3' overhang
      * Note that a read 3' underhang can be ignored!
      */
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] readStartPos %" PRId32 " readpos %" PRId32 " readEndPos %" PRId32 "\n", readStartPos, readPos, readEndPos);
     fprintf(stderr, "[updateAlignment] refStartPos %" PRId32 "\n", refStartPos);
-#endif
+//#endif
+}
     if(readStartPos > 0) { //5' overhang
         while(readPos < readStartPos) {
             if(oplen == 0) {
+                assert(read_cigar_opnum < b->core.n_cigar);
                 op = bam_cigar_op(bam_get_cigar(b)[read_cigar_opnum]);
                 oplen = bam_cigar_oplen(bam_get_cigar(b)[read_cigar_opnum++]);
             }
             //If the op consumes the query and extends past the while-loop bounds, then trim
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] readPos %" PRId32 " oplen %"PRId32" readStartPos %"PRId32" bam_cigar_type(op) %i\n", readPos, oplen, readStartPos, bam_cigar_type(op));
-#endif
+//#endif
+}
             if(readPos + oplen>= readStartPos && (bam_cigar_type(op)&1)) {
                 oplen = readStartPos-readPos;
                 if(bam_cigar_type(op)&1) readPos += oplen;
@@ -453,9 +461,15 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
         if(refStartPos > 0) {
             while(refPos < refStartPos) {
                 if(oplen2 == 0) {
+                    assert(ref_cigar_opnum < al->cigarLen);
                     op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
                     oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum++]);
                 }
+//#ifdef DEBUG
+if(verbose) {
+                fprintf(stderr, "[updateAlignment] ref got cigar %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
+//#endif
+}
                 if(refPos + oplen2>= refStartPos && bam_cigar_type(op)&2) {
                     oplen2 = refPos+oplen2-refStartPos;
                     refPos = refStartPos;
@@ -467,33 +481,42 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 }
             }
         }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] 5' overhang CIGAR ");
     for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
     fprintf(stderr, "\n");
-#endif
+//#endif
+}
     } else if(refStartPos>0) { //5' Underhang, note new start position
         newStartPos = refStart;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] refStart is %" PRId32 " so we start with newStartPos = that\n", refStart);
-#endif
+//#endif
+}
         while(refPos < refStartPos) {
             if(oplen2 == 0) {
+                assert(ref_cigar_opnum < al->cigarLen);
                 op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
                 oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum++]);
             }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] refPos %" PRId32 " refStartPos %" PRId32 "\n", refPos, refStartPos);
             fprintf(stderr, "[updateAlignment] oplen %" PRId32 " op %c\n", oplen2, BAM_CIGAR_STR[op2]);
             fprintf(stderr, "[updateAlignment] bam_cigar_type(op) == %i\n", bam_cigar_type(op2));
             fflush(stderr);
-#endif
+//#endif
+}
             if(refPos + oplen2>= refStartPos && bam_cigar_type(op2)&1) {
                 if(bam_cigar_type(op2) &2) newStartPos += refStartPos;
                 oplen2 = refPos+oplen2-refStartPos;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
                 fprintf(stderr, "[updateAlignment] Truncating oplen to %" PRId32 "\n", oplen2);
-#endif
+//#endif
+}
                 refPos = refStartPos;
                 break;
             }
@@ -505,34 +528,43 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             }
             oplen2 = 0;
         }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] 5' underhang CIGAR ");
         for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
         fprintf(stderr, "\n");
-#endif
+//#endif
+}
     }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] Remnant CIGAR is %" PRId32 "%c\n", oplen, BAM_CIGAR_STR[op]);
     fprintf(stderr, "[updateAlignment] Remnant CIGAR2 is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
     fflush(stderr);
     fprintf(stderr, "[updateAlignment] Before overlap region: refPos %" PRId32 " refEndPos %" PRId32 "\n", refPos, refEndPos);
-#endif
+//#endif
+}
 
     //Deal with the overlap region
     while(refPos <= refEndPos) {
         if(oplen2 == 0) {
+            assert(ref_cigar_opnum < al->cigarLen);
             op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
             oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum++]);
         }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] 1 Found op %"PRId32"%c bam_cigar_type(op2) %i\n", oplen2, BAM_CIGAR_STR[op2], bam_cigar_type(op2));
         fprintf(stderr, "[updateAlignment] 1 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
-#endif
+//#endif
+}
         if(refPos + oplen2>= refEndPos+1 && bam_cigar_type(op2)&1) {
             oplen2 = refEndPos-refPos+1;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] Truncating the operation to length %" PRId32" and breaking\n", oplen2);
-#endif
+//#endif
+}
             if(oplen) {
                 if(op == op2) {
                     oplen2 += oplen;
@@ -544,47 +576,61 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             break;
         } else { //Append to newCIGARArray
             if(oplen) {
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
                 fprintf(stderr, "[updateAlignment] Comparing %c and %c\n", BAM_CIGAR_STR[op], BAM_CIGAR_STR[op2]);
-#endif
+//#endif
+}
                 if(op == op2) {
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
                     fprintf(stderr, "[updateAlignment] refPos before %" PRId32" ", refPos);
-#endif
+//#endif
+}
                     if(bam_cigar_type(op2) &1) {
                         refPos += oplen2;
                         readPos += oplen2;
                     }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
                     fprintf(stderr, " and %" PRId32" after\n", refPos);
-#endif
+//#endif
+}
                     oplen2 += oplen;
                 } else newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op, oplen);
                 oplen = 0;
             } else {
                 if(bam_cigar_type(op2) &1) refPos += oplen2;
             }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] pushing %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
-#endif
+//#endif
+}
             newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op2, oplen2);
             oplen2 = 0;
         }
         oplen2 = 0;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] 2 refPos %" PRId32 " refEndPos+1 %" PRId32 "\n", refPos, refEndPos+1);
-#endif
+//#endif
+}
     }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] Remnant CIGAR is %" PRId32 "%c\n", oplen2, BAM_CIGAR_STR[op2]);
-#endif
+//#endif
+}
     oplen = 0;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] Post-overlap CIGAR ");
     for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
     fprintf(stderr, "\n");
     fprintf(stderr, "[updateAlignment] Before 3' overhang, readPos %" PRId32 "readEndPos %" PRId32 " b->core.l_qseq-1 %" PRId32"\n", readPos, readEndPos, b->core.l_qseq-1);
-#endif
+//#endif
+}
 
     //3' Overhang
     if(readEndPos < b->core.l_qseq-1) {
@@ -594,15 +640,19 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
         for(read_cigar_opnum=0; read_cigar_opnum<b->core.n_cigar; read_cigar_opnum++) {
             op = bam_cigar_op(bam_get_cigar(b)[read_cigar_opnum]);
             oplen = bam_cigar_oplen(bam_get_cigar(b)[read_cigar_opnum]);
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] Found %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
-#endif
+//#endif
+}
             if(bam_cigar_type(op) & 1) {
                 if(readPos+oplen>readEndPos) {
                     oplen = oplen+readPos-readEndPos;
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
                     fprintf(stderr, "[updateAlignment] Truncating to %"PRId32" due to readPos=%"PRId32" and readEndPos %"PRId32"\n", oplen, readPos, readEndPos);
-#endif
+//#endif
+}
                     readPos += oplen;
                     read_cigar_opnum++; //Otherwise, the break will prevent this
                     break;
@@ -610,14 +660,16 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 readPos += oplen;
             }
         }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] read_cigar_opnum %"PRId32"\n", read_cigar_opnum);
         fprintf(stderr, "[updateAlignment] remnant CIGAR op is %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
         fprintf(stderr, "[updateAlignment] remnant CIGAR2 op is %"PRId32"%c\n", oplen2, BAM_CIGAR_STR[op2]);
         fprintf(stderr, "[updateAlignment] 3' overhang remnant CIGAR ");
         for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
         fprintf(stderr, "\n");
-#endif
+//#endif
+}
         //Can we merge this OP with that from the overlap?
         if(oplen2) {
             if(op==op2) {
@@ -627,17 +679,21 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                 oplen2 = 0;
             }
         }
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
         fprintf(stderr, "[updateAlignment] remnant CIGAR op is %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
         fprintf(stderr, "[updateAlignment] 3' overhang CIGAR ");
         for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
         fprintf(stderr, "\n");
-#endif
+//#endif
+}
         //Push the remnant CIGAR, if it exists
         if(oplen) {
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
             fprintf(stderr, "[updateAlignment] Pushing remnant %"PRId32"%c\n", oplen, BAM_CIGAR_STR[op]);
-#endif
+//#endif
+}
             newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op, oplen);
         }
         //Finish adding the alignment's original OPs
@@ -650,15 +706,18 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
         newCIGARArray = pushCIGAR(newCIGARArray, n_cigar++, &max_cigar, op2, oplen2);
     }
 
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     fprintf(stderr, "[updateAlignment] Final CIGAR ");
     for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
     fprintf(stderr, "\n");
     if(newStartPos != -1) fprintf(stderr, "[updateAlignment] new alignment starting position %" PRId32 "\n", newStartPos);
     fflush(stderr);
-#endif
+//#endif
+}
     if(newStartPos != -1) updatePos(b, newStartPos);
-#ifdef DEBUG
+//#ifdef DEBUG
+if(verbose) {
     //Ensure that the new CIGAR string matchs b->core.l_qseq
     assert(n_cigar>0);
     oplen2 = 0;
@@ -670,7 +729,8 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     }
     fflush(stderr);
     assert(oplen2==b->core.l_qseq);
-#endif
+//#endif
+}
     updateCigar(b, newCIGARArray, n_cigar);
     free(newCIGARArray);
     return b;
@@ -799,6 +859,8 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     for(i=0; i<GApaths->l; i++) GApaths->conv[i] = char2int(GApaths->path[i], GApaths->len[i]);
 
     //Align the paths to the reference sequence
+    //We need to use global alignment, not local, for this!
+    //It's possible that the reference path contains a cycle, so we should manually check for its presence and add it if needed
     CTal = alignPaths2Ref(CTpaths, CTref, refLen, CT, &(refIndex[0]));
     GAal = alignPaths2Ref(GApaths, GAref, refLen, GA, &(refIndex[1]));
 
@@ -891,6 +953,34 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     free(readRBound);
 }
 
+paths *addRefPath(char *Seq, int len, paths *p) {
+    int32_t i, found = 0;
+    for(i=0; i<p->l; i++) {
+        if(p->len[i] == len) {
+            if(strcmp(p->path[i], Seq) == 0) {
+                found = 1;
+                break;
+            }
+        }
+    }
+    if(found==0) {
+#ifdef DEBUG
+        fprintf(stderr, "[addRefPath] Manually added ref path %s\n", Seq); fflush(stderr);
+#endif
+        p->l++;
+        if(p->l >= p->m) {
+            p->m = p->l;
+            p->len = realloc(p->len, sizeof(int32_t)*(p->m));
+            assert(p->len);
+            p->path = realloc(p->path, sizeof(char *)*(p->m));
+            assert(p->path);
+        }
+        p->len[p->l-1] = len;
+        p->path[p->l-1] = strdup(Seq);
+    }
+    return p;
+}
+
 //k is the kmer
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     bf *filter = bf_init(heap->end-heap->start, WINDOW);
@@ -950,6 +1040,10 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
 #endif
     GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C');
     free(startVertex);
+
+    //Ensure that the reference path is included (it won't be if it contains a cycle!)
+    CTpaths = addRefPath(CT, len, CTpaths);
+    GApaths = addRefPath(GA, len, GApaths);
 
     //Realign the read portions to the paths
     if(CTpaths->l + GApaths->l) {

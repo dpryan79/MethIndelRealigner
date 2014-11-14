@@ -10,6 +10,7 @@ Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C imp
 
 To Do
 =====
+ * Possible realignment paths need to be aligned against reference sequence with a global method, not local!
  * Support multiple threads in the realignHeapCore.
  * Compare time requirements with BisSNP
  * Ensure validity of results on a non-trivial example!!!
