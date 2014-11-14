@@ -1,10 +1,13 @@
 #include "realigner.h"
 #include "htslib/kseq.h"
 #include "htslib/faidx.h"
+#include "htslib/bgzf.h"
 #include <zlib.h>
 #include <getopt.h>
 
 KSTREAM_INIT(gzFile, gzread, 4096)
+
+bam_hdr_t *GLOBAL_HEADER; //This just makes printing convenient
 
 struct bounds {
     int32_t tid, start, end;
@@ -23,22 +26,10 @@ int regionNodeCmp(int32_t tid, int32_t start, int32_t end) {
 int overlapsRegionsCore(int32_t tid, int32_t start, int32_t end) {
     int direction;
 
-    //The only reliable way to find the 5'-most region is from the left.
-    while(regionNodeCmp(tid,start,end) <= 0) {
-//#ifdef DEBUG
-//        fprintf(stderr, "[overlapsRegionsCore] Direction %i\n", regionNodeCmp(tid,start,end));
-//        fprintf(stderr, "[overlapsRegionsCore] CurPosition  %i:%i-%i\n", (int) tid, (int)start, (int)end);
-//        fprintf(stderr, "[overlapsRegionsCore] ListPosition %i:%i-%i\n", (int) lastTargetNode->tid, (int)lastTargetNode->start, (int)lastTargetNode->end);
-//        fflush(stderr);
-//#endif
-        lastTargetNode = lastTargetNode->prev; //Not sure if this really updates things
-    }
-    while(lastTargetNode->next != NULL) {
-        lastTargetNode = lastTargetNode->next;
-        direction = regionNodeCmp(tid,start,end);
-        if(direction == 0) return 1;
-        else if(direction > 0) return 0;
-    }
+    if(lastTargetNode==NULL) return 0;
+
+    direction = regionNodeCmp(tid,start,end);
+    if(direction == 0) return 1;
     return 0;
 }
 
@@ -86,7 +77,7 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
 #ifdef DEBUG
             fprintf(stderr, "[processReads] %s in region\n", bam_get_qname(b)); fflush(stderr);
 #endif
-            fprintf(stderr, "ROI tid %"PRId32" start %"PRId32" end %"PRId32"\n", bounds->tid, bounds->start, bounds->end); fflush(stderr);
+            fprintf(stderr, "%s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[bounds->tid], bounds->start, bounds->end); fflush(stderr);
             heap->heap[0] = b;
             heap->start = bounds->start;
             heap->end = bounds->end;
@@ -156,7 +147,9 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
                 realignHeap(heap, k, fai);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
+            if(status==2){ fprintf(stderr, "Before heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             heap = writeHeapUntil(of, hdr, heap, depth);
+            if(status==2){ fprintf(stderr, "After heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             if(heap->l) {//The heap wasn't flushed
                 goto inheap; //Yeah yeah, I know
             }
@@ -198,7 +191,7 @@ int bed2list(gzFile fp, bam_hdr_t *hdr) {
     if(ks->s) free(ks->s);
     free(ks);
     ks_destroy(kstr);
-    fprintf(stderr, "Found %"PRIu32" ROIs\n", total); fflush(stderr);
+    fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1); fflush(stderr);
     return 0;
 }
 
@@ -216,6 +209,8 @@ void usage(char *prog) {
 "         TargetCreator and supply the resulting BED file here.\n"
 "-D INT   Maximum heap depth. This effectively limits the depth covering any\n"
 "         position that needs to be realigned. The default is 1000.\n"
+"-@ INT   Number of compression threads (equivalent to the -@ option in\n"
+"         samtools). Default 1.\n"
 "--ROIdepth INT Minimum depth covering a putative ROI to include it. This option\n"
 "         is ignored if you supply a BED file. The default is 4, meaning that\n"
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
@@ -231,7 +226,7 @@ int main(int argc, char *argv[]) {
     gzFile bed;
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 17;
-    int ROIdepth = 4, ROIqual = 10;
+    int ROIdepth = 4, ROIqual = 10, nCompThreads = 1;
     uint32_t total = 0;
 
     static struct option lopts[] = {
@@ -240,7 +235,7 @@ int main(int argc, char *argv[]) {
         {"ROIqual",  1, NULL, 'q'}
     };
 
-    while((c = getopt_long(argc, argv, "k:l:D:", lopts, NULL)) >= 0) {
+    while((c = getopt_long(argc, argv, "k:l:D:@:", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
             usage(argv[0]);
@@ -264,6 +259,9 @@ int main(int argc, char *argv[]) {
             break;
         case 'q' :
             ROIqual = atoi(optarg);
+            break;
+        case '@' :
+            nCompThreads = atoi(optarg);
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -294,7 +292,7 @@ int main(int argc, char *argv[]) {
         initTargetNodes();
         findInDels(fp, hdr, ROIqual);
         total = depthFilter(ROIdepth);
-        fprintf(stderr, "Found %"PRIu32" ROIs\n", total);
+        fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1);
         fflush(stderr);
         bam_hdr_destroy(hdr);
         sam_close(fp);
@@ -305,7 +303,11 @@ int main(int argc, char *argv[]) {
 
     fai = fai_load(argv[optind+1]);
     of = sam_open(argv[optind+2], "wb");
+    if(nCompThreads>1) {
+        bgzf_mt(of->fp.bgzf, nCompThreads, 256);
+    }
     sam_hdr_write(of, hdr);
+    GLOBAL_HEADER = hdr;
 
     //Process the reads
     lastTargetNode = firstTargetNode->next;

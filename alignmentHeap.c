@@ -62,7 +62,7 @@ alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap,
         b = heap->heap[cur_i];
         reg.tid = b->core.tid;
         reg.start = b->core.pos;
-        reg.end = bam_endpos(b)+1;
+        reg.end = bam_endpos(b)-1;
     }
     lpos = b->core.pos;
     //Keep sort order, processing reads with same start pos
@@ -73,8 +73,8 @@ alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap,
             sam_write1(of, hdr, b);
             bam_destroy1(b);
         }
-        if(++cur_i >= heap->l) {
-            heap->l = 0;
+        if(++cur_i >= heap->l) { //Hit the end of the heap
+            heap->l = newl;
             return heap;
         }
         b = heap->heap[cur_i];

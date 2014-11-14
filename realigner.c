@@ -461,6 +461,10 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
                     refPos = refStartPos;
                     break;
                 }
+                if(bam_cigar_type(op)&2) {
+                    refPos += oplen2;
+                    oplen2=0;
+                }
             }
         }
 #ifdef DEBUG
