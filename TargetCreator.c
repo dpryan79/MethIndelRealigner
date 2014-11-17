@@ -21,13 +21,14 @@ void writeTargets(FILE *of, bam_hdr_t *hdr) {
  *
  * a    The first node
  * b    The second node
+ * k    The K-mer size
  *
  * returns <0 if a comes before b, >0 if b comes before a, and 0 if they overlap
  */
-int TargetNodeCmp(InDel *a, InDel *b) {
+int TargetNodeCmp(InDel *a, InDel *b, int k) {
     if(a->tid == b->tid) {
-        if(a->end+WINDOW < b->start-WINDOW) return -1;
-        if(a->start-WINDOW > b->end+WINDOW) return 1;
+        if(a->end+k < b->start-k) return -1;
+        if(a->start-k > b->end+k) return 1;
         return 0;
     } else {
         return a->tid - b->tid;
@@ -71,10 +72,11 @@ inline void removeNode(InDel *node) {
 
 /* Merge overlapping nodes
  *
- * node    The node to merge (onto last)
+ * node   The node to merge (onto last)
+ * k      The K-mer size
  *
  */
-void mergeNodes(InDel *node) {
+void mergeNodes(InDel *node, int k) {
     InDel *nextNode = lastTargetNode->next;
 
     //Update last
@@ -83,7 +85,7 @@ void mergeNodes(InDel *node) {
     lastTargetNode->count = (lastTargetNode->count + node->count > lastTargetNode->count) ? lastTargetNode->count + node->count : lastTargetNode->count;
 
     if(nextNode != NULL) {
-        while(TargetNodeCmp(lastTargetNode, nextNode) == 0) {
+        while(TargetNodeCmp(lastTargetNode, nextNode, k) == 0) {
             lastTargetNode->end = (lastTargetNode->end < nextNode->end) ? nextNode->end : lastTargetNode->end;
             lastTargetNode->count = (lastTargetNode->count + nextNode->count > lastTargetNode->count) ? lastTargetNode->count + nextNode->count : lastTargetNode->count;
             lastTargetNode->next = nextNode->next;
@@ -96,8 +98,8 @@ void mergeNodes(InDel *node) {
 
 /* Insert a node into a linked list following another node
  *
- * node    The node to insert
- * target  The node after which to insert
+ * node   The node to insert
+ * target The node after which to insert
  */
 void insertAfter(InDel *node, InDel *target) {
     node->prev = target;
@@ -113,7 +115,7 @@ void insertAfter(InDel *node, InDel *target) {
  * @discussion If the node matches one already in the list, then "node" is
  * freed.
  */
-void insertNode(InDel *node) {
+void insertNode(InDel *node, int k) {
     int direction;
 
     //Deal with the first node
@@ -123,19 +125,19 @@ void insertNode(InDel *node) {
         return;
     }
 
-    direction = TargetNodeCmp(node, lastTargetNode);
+    direction = TargetNodeCmp(node, lastTargetNode, k);
 
     //Always come from the left
     while(direction>=0 && lastTargetNode->next != NULL) {
         lastTargetNode = lastTargetNode->next;
-        direction = TargetNodeCmp(node, lastTargetNode);
+        direction = TargetNodeCmp(node, lastTargetNode, k);
     }
     if(direction > 0) {
         insertAfter(node, lastTargetNode);
         lastTargetNode = node;
         return;
     } else if(direction == 0) {
-        mergeNodes(node);
+        mergeNodes(node, k);
         destroyNode(node);
         return;
     }
@@ -143,14 +145,14 @@ void insertNode(InDel *node) {
     assert(direction < 0);
     while(lastTargetNode->prev != NULL && direction < 0) {
         lastTargetNode = lastTargetNode->prev;
-        direction = TargetNodeCmp(node, lastTargetNode);
+        direction = TargetNodeCmp(node, lastTargetNode, k);
     }
     if(direction != 0) {
         insertAfter(node, lastTargetNode);
         lastTargetNode = node;
         return;
     } else if(direction == 0) {
-        mergeNodes(node);
+        mergeNodes(node, k);
         destroyNode(node);
         return;
     }
@@ -208,10 +210,11 @@ InDel *makeNode(bam1_t *b, int cigar_op_num) {
  *
  * fp    Input BAM/CRAM file
  * hdr   The header for the BAM/CRAM file
+ * k     The K-mer size
  *
  * discussion The linked list will need to be destroyed with destroyNodes()
  */
-void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ) {
+void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ, int k) {
     bam1_t *b = bam_init1();
     int i, op;
     InDel *node;
@@ -225,7 +228,7 @@ void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ) {
             if(op == 1 || op == 2) {
                 node = makeNode(b, i);
                 if(node == NULL) goto quit;
-                insertNode(node);
+                insertNode(node, k);
                 while(++i < b->core.n_cigar) { //Skip adjacent D/I operations
                     op = bam_cigar_op(cigar[i]);
                     if(op != 1 && op != 2) break;

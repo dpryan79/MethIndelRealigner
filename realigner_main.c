@@ -67,7 +67,7 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
     struct bounds *bounds;
     alignmentHeap *heap = alignmentHeap_init(depth); //Need to make this an option
     int status; //1: EOF, 2: heap max, 3: Past ROI
-    InDel reg;
+//    InDel reg;
 
     while(sam_read1(fp, hdr, b) > 0) {
 #ifdef DEBUG
@@ -103,13 +103,11 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
 inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core.tid) {
                     //If the alignment and the first in the heap have the same pos...
                     if(b->core.pos == heap->heap[0]->core.pos) {
-                        reg.tid = b->core.tid;
-                        reg.start = b->core.pos;
-                        reg.end = bam_endpos(b)+1;
-                        if(TargetNodeCmp(&reg, lastTargetNode) != 0) {
+                        if((bounds = overlapsRegion(b)) == NULL) {
                             sam_write1(of, hdr, b);
                             continue;
                         }
+                        free(bounds);
                     }
                     if(heap->l+1 > heap->m) {
                         status = 2;
@@ -184,7 +182,8 @@ int bed2list(gzFile fp, bam_hdr_t *hdr) {
         node->start = strtol(s, NULL, 10);
         s = strtok(NULL, "\n");
         node->end = strtoul(s, NULL, 10);
-        insertNode(node);
+        insertAfter(node, lastTargetNode);
+        lastTargetNode = lastTargetNode->next;
         total++;
     }
     lastTargetNode = firstTargetNode;
@@ -290,7 +289,7 @@ int main(int argc, char *argv[]) {
     } else {
         //Run TargetCreator ourselves
         initTargetNodes();
-        findInDels(fp, hdr, ROIqual);
+        findInDels(fp, hdr, ROIqual, kmer);
         total = depthFilter(ROIdepth);
         fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1);
         fflush(stderr);
@@ -303,9 +302,7 @@ int main(int argc, char *argv[]) {
 
     fai = fai_load(argv[optind+1]);
     of = sam_open(argv[optind+2], "wb");
-    if(nCompThreads>1) {
-        bgzf_mt(of->fp.bgzf, nCompThreads, 256);
-    }
+    if(nCompThreads>1) bgzf_mt(of->fp.bgzf, nCompThreads, 256);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
 

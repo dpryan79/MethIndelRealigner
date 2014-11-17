@@ -76,7 +76,7 @@ if(reg.end-reg.start>10000) {
 }
 */
     while(b->core.pos == lpos) {
-        if(TargetNodeCmp(&reg, lastTargetNode) == 0) {
+        if(reg.end >= lastTargetNode->start && reg.start < lastTargetNode->end && reg.tid == lastTargetNode->tid) {
             heap->heap[newl++] = b;
         } else {
             sam_write1(of, hdr, b);

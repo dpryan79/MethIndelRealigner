@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
     hdr = sam_hdr_read(fp);
     initTargetNodes();
     //Iterate
-    findInDels(fp, hdr, 10);
+    findInDels(fp, hdr, 10, 17);
     //Filter
     total = depthFilter(4);
     //Write output

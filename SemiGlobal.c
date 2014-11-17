@@ -171,7 +171,7 @@ skip:
         j--;
     }
     sal->cigar = cigar;
-//#ifdef DEBUG
+#ifdef DEBUG
 //    printMatrix(mat, pathLen+2-k, refLen+2-k);
     fprintf(stderr, "[SemiGlobalAlignment] ref ");
     for(i=0; i<refLen; i++) fprintf(stderr, "%"PRId8, ref[i]);
@@ -196,7 +196,7 @@ skip:
         if(bam_cigar_type(op)&2) l+=oplen;
     }
     assert(l==refLen);
-//#endif
+#endif
 
     for(i=0; i<pathLen+2-k; i++) free(mat[i]);
     free(mat);

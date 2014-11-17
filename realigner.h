@@ -8,9 +8,6 @@
 #include <inttypes.h>
 #include "SSW/ssw.h"
 
-//The window size around an InDel to use for merging
-#define WINDOW 17 //This should be an option, must be odd!
-
 /*! @typedef
  @abstract This will form an element in a linked list of possible InDel Haplotypes.
  @field tid	Chromosome ID
@@ -87,10 +84,11 @@ void initTargetNodes();
  *
  * a    The first node
  * b    The second node
+ * k    The K-mer size
  *
  * returns <0 if a comes before b, >0 if b comes before a, and 0 if they overlap
  */
-int TargetNodeCmp(InDel *a, InDel *b);
+int TargetNodeCmp(InDel *a, InDel *b, int k);
 
 /* Write the target node list to a file in BED format
  * 
@@ -100,25 +98,34 @@ int TargetNodeCmp(InDel *a, InDel *b);
  */
 void writeTargets(FILE *of, bam_hdr_t *hdr);
 
+/* Insert a node into a linked list following another node
+ *
+ * node   The node to insert
+ * target The node after which to insert
+ */
+void insertAfter(InDel *node, InDel *target);
+
 /* Insert a node somewhere in the linked list
  *
- * node    The node to insert
+ * node The node to insert
+ * k    The K-mer size
  *
  * @discussion If the node matches one already in the list, then "node" is
  * freed.
  */
-void insertNode(InDel *node);
+void insertNode(InDel *node, int k);
 
 /* Finds InDels in a BAM or CRAM file, adding them to the linked list
  *
  * fp    Input BAM/CRAM file
  * hdr   The header for the BAM/CRAM file
  * minMAPQ The MAPQ threshold
+ * k     The k-mer size
  *
  * discussion The linked list will need to be destroyed with destroyNodes().
  * Setting minMAPQ=-1 will use all alignments.
  */
-void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ);
+void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ, int k);
 
 /* Filter the linked list by node depth
  *

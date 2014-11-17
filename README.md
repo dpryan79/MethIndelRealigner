@@ -10,8 +10,11 @@ Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C imp
 
 To Do
 =====
- * Possible realignment paths need to be aligned against reference sequence with a global method, not local!
- * Support multiple threads in the realignHeapCore.
+ * Support multiple threads in realignHeapCore:
+    * findBestAlignment
+    * updateAlignment
+    * alignPaths2Ref
+    * alignReads2Paths
  * Compare time requirements with BisSNP
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
@@ -19,4 +22,3 @@ To Do
  * The Makefile shouldn't have my local settings hard coded! Mention needing htslib (or just make it a submodule).
  * Add a license (probably MIT-style)
  * Run valgrind
- * There's still a WINDOW constant defined
