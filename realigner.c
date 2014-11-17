@@ -137,6 +137,7 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
         return;
     }
 #ifdef DEBUG
+    fprintf(stderr, "[bam2kmer] start2 %"PRId32" end2 %"PRId32" refLen %"PRId32"\n", start2, end2, refLen);
     fprintf(stderr, "[bam2kmer] positions[start2] %"PRId32" start %"PRId32"\n", positions[start2], start);
     fprintf(stderr, "[bam2kmer] positions[end2] %"PRId32" end %"PRId32"\n", positions[end2], end);
 #endif
@@ -154,10 +155,10 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
         if(offset==0) strncpy(ks->s, CT, positions[start2]-refStart);
         else strncpy(ks->s, GA, positions[start2]-refStart);
     }
-    ks->s[positions[start2]-refStart] = '\0';
 #ifdef DEBUG
-    fprintf(stderr, "[bam2kmer] adding read from base %"PRId32" through %"PRId32" inclusive\n", start2, end2);
+    ks->s[positions[start2]-refStart] = '\0';
     fprintf(stderr, "[bam2kmer] %s\n", ks->s);
+    fprintf(stderr, "[bam2kmer] adding read from base %"PRId32" through %"PRId32" inclusive\n", start2, end2);
 #endif
 
     //Extract the C->T and G->A sequences
@@ -168,13 +169,14 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
 #ifdef DEBUG
     ks->s[positions[start2]-refStart+i-start2] = '\0';
     fprintf(stderr, "[bam2kmer] %s\n", ks->s);
-    fprintf(stderr, "[bam2kmer] Length should be %" PRId64"\n", ks->l);
+    fprintf(stderr, "[bam2kmer] current length should be %i\n", positions[start2]-refStart+i-start2);
+    fprintf(stderr, "[bam2kmer] Final length should be %" PRId64"\n", ks->l);
 #endif
 
     //Add 3' reference sequence
 #ifdef DEBUG
     fprintf(stderr, "[bam2kmer] Copying over the last %"PRId32"\n", refEnd-positions[end2]);
-    assert(refEnd-positions[end2] < end-start);
+    assert(refEnd-positions[end2] < refLen-k);
 #endif
     if(refEnd-positions[end2]) {
         if(offset==0) strncpy(ks->s+positions[start2]-refStart+end2-start2+1,
@@ -417,6 +419,7 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     int verbose = 0;
     if(strcmp(bam_get_qname(b), "PC140529:148:D0KVLACXX:6:1101:6878:130513") == 0) verbose=1;
     if(strcmp(bam_get_qname(b), "PC140529:148:D0KVLACXX:6:2107:4949:98668") == 0) verbose=1;
+    if(strcmp(bam_get_qname(b), "PC140529:148:D0KVLACXX:6:1101:14831:102129") == 0) verbose=1;
 
     assert(newCIGARArray);
     assert(readEndPos-readStartPos == refEndPos-refStartPos);
@@ -737,26 +740,14 @@ if(verbose) {
 }
 
 //Align all of the paths to a reference sequence
-s_align **alignPaths2Ref(paths *p, int8_t *ref, int32_t refLen, char *refSeq, int32_t *refIndex) {
+s_align **alignPaths2Ref(paths *p, int8_t *ref, int32_t refLen, char *refSeq, int32_t *refIndex, int32_t k) {
     int32_t i;
-    s_profile *s;
     s_align **alignments = malloc(sizeof(s_align*) * p->l);
     assert(alignments);
-#ifdef DEBUG
-    int j;
-#endif
     for(i=0; i<p->l; i++) {
-        s = ssw_init(p->conv[i], p->len[i], scoreMatrix, 4, (2*p->len[i] < 255) ? 0: 1);
-        alignments[i] = ssw_align(s, ref, refLen, 3, 1, 2, 0, 0, 15);
-#ifdef DEBUG
-        fprintf(stderr, "[alignPaths2Ref] path[%i] aligned against ref with CIGAR ", i);
-        for(j=0; j<alignments[i]->cigarLen; j++) fprintf(stderr, "%" PRIu32 "%c", cigar_int_to_len(alignments[i]->cigar[j]), cigar_int_to_op(alignments[i]->cigar[j]));
-        fprintf(stderr, "\n");
-        fflush(stderr);
-#endif
+        alignments[i] = SemiGlobalAlignment(ref, refLen, p->conv[i], p->len[i], k);
         if(*refIndex == -1 && alignments[i]->cigarLen == 1)
             if(strcmp(refSeq, p->path[i]) == 0) *refIndex = i;
-        init_destroy(s);
     }
     return alignments;
 }
@@ -859,10 +850,8 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     for(i=0; i<GApaths->l; i++) GApaths->conv[i] = char2int(GApaths->path[i], GApaths->len[i]);
 
     //Align the paths to the reference sequence
-    //We need to use global alignment, not local, for this!
-    //It's possible that the reference path contains a cycle, so we should manually check for its presence and add it if needed
-    CTal = alignPaths2Ref(CTpaths, CTref, refLen, CT, &(refIndex[0]));
-    GAal = alignPaths2Ref(GApaths, GAref, refLen, GA, &(refIndex[1]));
+    CTal = alignPaths2Ref(CTpaths, CTref, refLen, CT, &(refIndex[0]), k);
+    GAal = alignPaths2Ref(GApaths, GAref, refLen, GA, &(refIndex[1]), k);
 
     //Iterate over the reads, aligning them to the paths
     refLBound = ((*heap)->start-k >= 0) ? (*heap)->start-k : 0;

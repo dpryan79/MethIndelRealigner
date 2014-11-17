@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <inttypes.h>
+#include "SSW/ssw.h"
 
 //The window size around an InDel to use for merging
 #define WINDOW 17 //This should be an option, must be odd!
@@ -163,3 +164,6 @@ inline int bf_exists(bf *bf, uint64_t hash);
 uint64_t hash_seq(char *seq, int len);
 
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai);
+
+//needlemanWunsch.c
+s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k);

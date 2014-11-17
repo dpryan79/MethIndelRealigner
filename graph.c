@@ -291,7 +291,7 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
 #endif
             appendPath(paths, stack, k, finalChars[i]);
 #ifdef DEBUG
-            fprintf(stderr, "[nextBFSVertex] Added path %s\n", (*paths)->path[(*paths)->l-1]); fflush(stderr);
+            if((*paths)->l) fprintf(stderr, "[nextBFSVertex] Added path %s\n", (*paths)->path[(*paths)->l-1]); fflush(stderr);
 #endif
             continue;
         }
