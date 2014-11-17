@@ -21,4 +21,3 @@ To Do
  * Use a bloom filter to hold visited nodes during graph DFS traversal
  * The Makefile shouldn't have my local settings hard coded! Mention needing htslib (or just make it a submodule).
  * Add a license (probably MIT-style)
- * Run valgrind

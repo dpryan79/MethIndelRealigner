@@ -65,9 +65,8 @@ struct bounds * overlapsRegion(bam1_t *b) {
 void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai, int depth) {
     bam1_t *b = bam_init1();
     struct bounds *bounds;
-    alignmentHeap *heap = alignmentHeap_init(depth); //Need to make this an option
+    alignmentHeap *heap = alignmentHeap_init(depth);
     int status; //1: EOF, 2: heap max, 3: Past ROI
-//    InDel reg;
 
     while(sam_read1(fp, hdr, b) > 0) {
 #ifdef DEBUG
@@ -149,6 +148,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
             heap = writeHeapUntil(of, hdr, heap, depth);
             if(status==2){ fprintf(stderr, "After heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             if(heap->l) {//The heap wasn't flushed
+                fprintf(stderr, "%s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
                 goto inheap; //Yeah yeah, I know
             }
 #ifdef DEBUG
@@ -190,7 +190,7 @@ int bed2list(gzFile fp, bam_hdr_t *hdr) {
     if(ks->s) free(ks->s);
     free(ks);
     ks_destroy(kstr);
-    fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1); fflush(stderr);
+    fprintf(stderr, "Found %"PRIu32" ROIs\n", total); fflush(stderr);
     return 0;
 }
 
