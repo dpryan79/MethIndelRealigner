@@ -1,6 +1,8 @@
 #include "realigner.h"
 #include "htslib/faidx.h"
+#ifdef SSW
 #include "SSW/ssw.h"
+#endif
 
 char int2base[32] = {0, 'A', 'T', 0, 'G', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N', \
                      0, 'A', 'C', 0, 'A', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N'};
@@ -143,9 +145,9 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
 #endif
 
     //Grow ks as needed
-    if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart))
-        ks_resize(ks, (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart));
-    ks->l = (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart);
+    if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1)
+        ks_resize(ks, (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1);
+    ks->l = (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1;
 
     //Add 5' reference sequence
 #ifdef DEBUG
@@ -165,12 +167,11 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
     for(i=start2; i<=end2; i++) {
         ks->s[positions[start2]-refStart+i-start2] = int2base[offset+bam_seqi(bam_get_seq(b), i)];
     }
-    ks->s[ks->l] = '\0';
 #ifdef DEBUG
     ks->s[positions[start2]-refStart+i-start2] = '\0';
     fprintf(stderr, "[bam2kmer] %s\n", ks->s);
     fprintf(stderr, "[bam2kmer] current length should be %i\n", positions[start2]-refStart+i-start2);
-    fprintf(stderr, "[bam2kmer] Final length should be %" PRId64"\n", ks->l);
+    fprintf(stderr, "[bam2kmer] Final length should be %" PRId64"\n", ks->l-1);
 #endif
 
     //Add 3' reference sequence
@@ -187,11 +188,12 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
                      refEnd-positions[end2]);
     }
 #ifdef DEBUG
+    ks->s[ks->l-1] = '\0'; //The length is actually ONLY the string
     fprintf(stderr, "[bam2kmer] Final read sequence %s\n", ks->s); fflush(stderr);
 #endif
 
     //Add the kmers, ignoring the first and last
-    for(i=1; i<ks->l-k; i++) {
+    for(i=1; i<ks->l-k-1; i++) {
         h = hash_seq(ks->s+i, k);
 #ifdef DEBUG
         snprintf(tmp, k+1, "%s", ks->s+i);
@@ -289,8 +291,10 @@ int8_t *char2int(char *seq, int len) {
 //Given a set of alignments and a score, return the alignment with that score with the highest count
 //Return -1 if there is no best alignment, which will result in the read not being realigned (we should mark these)
 int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts, int32_t readLen) {
+#ifdef SSW
     int32_t best=-1, bestScore = -1, i;
     uint32_t bestCount = 0;
+    uint16_t bestScore = 0xFFFF;
 
     //Get the maximum score
     for(i=0; i<len; i++)
@@ -306,10 +310,29 @@ int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts, int32_t r
     }
 
     return best;
+#else
+    uint16_t bestScore = 0xFFFF;
+    uint32_t bestCount = 0;
+    int32_t i, best = -1;
+    for(i=0; i<len; i++) {
+        if(al[i]->score1 < bestScore) bestScore = al[i]->score1;
+    }
+
+    //Given a score, find the path with the highest count
+    for(i=0; i<len; i++) {
+        if(al[i]->score1 == bestScore && counts[i] > bestCount) {
+            bestCount = counts[i];
+            best = i;
+        }
+    }
+
+    return best;
+#endif
 }
 
 //Count the number of best-stratum alignments per path
 void countAlignmentsPerPath(s_align** al, int32_t len, uint32_t *counts) {
+#ifdef SSW
     int32_t bestScore = -1, i;
 
     //Get the maximum score
@@ -328,6 +351,20 @@ void countAlignmentsPerPath(s_align** al, int32_t len, uint32_t *counts) {
 #endif
         }
     }
+#else
+    uint16_t bestScore = 0xFFFF;
+    int32_t i;
+    for(i=0;i<len;i++) {
+        if(al[i]->score1 < bestScore) bestScore = al[i]->score1;
+    }
+
+    //Increment the counter if score1 == bestScore
+    for(i=0; i<len; i++) {
+        if(al[i]->score1 == bestScore) {
+            if(counts[i] < 0xFFFFFFFF) counts[i]++;
+        }
+    }
+#endif
 }
 
 //Update b->core.pos, adding an OP aux tag if needed
@@ -703,7 +740,9 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
                            //   A  C     G           T                    N
     int8_t int2small[16] = {-1, 0, 1,-1, 1,-1,-1, 0, 2,-1,-1,-1,-1,-1,-1, 3};
     int32_t *positions, i, subreadL;
+#ifdef SSW
     s_profile *s;
+#endif
     s_align **readal = malloc(sizeof(s_align*)*p->l);
     assert(readal);
 #ifdef DEBUG
@@ -731,7 +770,6 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
     }
     for(i=(*readLBound); i<=(*readRBound); i++) (*subreadSeq)[i-(*readLBound)] = int2small[bam_seqi(bam_get_seq(b), i)];
 #ifdef DEBUG
-
     fprintf(stderr, "[alignReads2Paths] read ");
     for(i=0; i<subreadL; i++) fprintf(stderr, "%"PRId8, (*subreadSeq)[i]);
     fprintf(stderr, "\n");
@@ -739,9 +777,15 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 #endif
 
     //Align
+#ifdef SSW
     s = ssw_init((*subreadSeq), subreadL, scoreMatrix, 4, (2*subreadL < 255) ? 0: 1);
+#endif
     for(i=0; i<p->l; i++) {
+#ifdef SSW
         readal[i] = ssw_align(s, p->conv[i], p->len[i], 3, 1, 2, 0, 0, 15);
+#else
+        readal[i] = GlobalAlignment(p->conv[i], p->len[i], *subreadSeq, subreadL);
+#endif
 #ifdef DEBUG
         fprintf(stderr, "[alignReads2Paths] ref[%i] ", i);
         for(j=0; j<p->len[i]; j++) fprintf(stderr, "%"PRId8, p->conv[i][j]);
@@ -758,7 +802,9 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 
     //Clean up
     free(positions);
+#ifdef SSW
     init_destroy(s);
+#endif
 
     return(readal);
 }
@@ -872,15 +918,43 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
         strand = getStrand((*heap)->heap[i]);
         if(readal[i] == NULL) continue;
         if(strand&1) {
-            for(j=0; j<CTpaths->l; j++) align_destroy(readal[i][j]);
+            for(j=0; j<CTpaths->l; j++) {
+#ifdef SSW
+                align_destroy(readal[i][j]);
+#else
+                free(readal[i][j]->cigar);
+                free(readal[i][j]);
+#endif
+            }
         } else {
-            for(j=0; j<GApaths->l; j++) align_destroy(readal[i][j]);
+            for(j=0; j<GApaths->l; j++) {
+#ifdef SSW
+                align_destroy(readal[i][j]);
+#else
+                free(readal[i][j]->cigar);
+                free(readal[i][j]);
+#endif
+            }
         }
         free(readal[i]);
     }
     free(readal);
-    for(i=0; i<CTpaths->l; i++) align_destroy(CTal[i]);
-    for(i=0; i<GApaths->l; i++) align_destroy(GAal[i]);
+    for(i=0; i<CTpaths->l; i++) {
+#ifdef SSW
+        align_destroy(CTal[i]);
+#else
+        free(CTal[i]->cigar);
+        free(CTal[i]);
+#endif
+    }
+    for(i=0; i<GApaths->l; i++) {
+#ifdef SSW
+        align_destroy(GAal[i]);
+#else
+        free(GAal[i]->cigar);
+        free(GAal[i]);
+#endif
+    }
     free(CTal);
     free(GAal);
     free(subreadSeq);

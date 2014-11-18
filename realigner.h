@@ -6,7 +6,31 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <inttypes.h>
+
+#ifdef SSW
 #include "SSW/ssw.h"
+#else
+/*! @typedef structure of the alignment result
+ @field score1      the best alignment score
+ @field ref_begin1  0-based best alignment beginning position on reference
+ @field ref_end1    0-based best alignment ending position on reference
+ @field read_begin1 0-based best alignment beginning position on read
+ @field read_end1   0-based best alignment ending position on read
+ @field cigar       best alignment cigar, as in htslib
+ @field cigarLen    length of the cigar string; cigarLen = 0 when the best
+                    alignment path is not available
+ @discussion This is basically a subset of the s_align struct in SSW.
+*/
+typedef struct {
+    uint16_t score1;
+    int32_t ref_begin1;
+    int32_t ref_end1;
+    int32_t read_begin1;
+    int32_t read_end1;
+    uint32_t* cigar;
+    int32_t cigarLen;
+} s_align;
+#endif
 
 /*! @typedef
  @abstract This will form an element in a linked list of possible InDel Haplotypes.
@@ -173,4 +197,5 @@ uint64_t hash_seq(char *seq, int len);
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai);
 
 //needlemanWunsch.c
+s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen);
 s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k);
