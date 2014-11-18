@@ -18,57 +18,42 @@ void pushSGCIGAR(uint32_t **cigar, int32_t l, int32_t *m, int32_t op, int32_t op
     (*cigar)[l] = bam_cigar_gen(oplen, op);
 }
 
-//Perform global alignment, using a modified Needleman-Wunsch algorithm.
-//Because we're aligning against many paths, we won't allow InDels, only linear matches
+uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, uint16_t *scoreMatrix) {
+    int32_t i;
+    uint16_t score = 0;
+    for(i=0; i<seqLen; i++) {
+        score += scoreMatrix[4*seq[i] + ref[i]];
+        if(score >= maxScore) break;
+    }
+    return score;
+}
+
+//This method should average O(N*(M-N)/2 time, which is ~2x faster than GlobalAlignment()
 s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen) {
-    int32_t i, j, best_j = 0;
-    uint16_t *last, *cur, *tmp;
-    uint16_t nmatch = 1, mismatch = 3, best = 0xFFFF;
+    int32_t i, best_i = 0;
+    uint16_t nmatch = 1, mismatch = 3, best = 0xFFFF, score;
     uint32_t *cigar = malloc(sizeof(uint32_t));
-    uint16_t scoreMatrix[16] = {0, mismatch, mismatch, nmatch,
-                               mismatch, 0, mismatch, nmatch,
-                               mismatch, mismatch, 0, nmatch,
+                              //A  C/G       T         N reference sequence
+    uint16_t scoreMatrix[16] = {0, mismatch, mismatch, 0,
+                               mismatch, 0, mismatch, 0,
+                               mismatch, mismatch, 0, 0,
                                nmatch, nmatch, nmatch, 0};
     s_align *sal = malloc(sizeof(s_align));
     assert(sal);
     assert(cigar);
     cigar[0] = bam_cigar_gen(pathLen, 0);
 
-    //Initialize the counts
-//    fprintf(stderr, "refLen %"PRId32" pathLen %"PRId32"\n", refLen, pathLen);
-    last = malloc(sizeof(uint16_t) * refLen);
-    cur = malloc(sizeof(uint16_t) * refLen);
-    assert(last); assert(cur);
-    for(j=0; j<refLen; j++) {
-//        fprintf(stderr, "path[0] %"PRId8" ref[%"PRId32"] %"PRId8"\n", path[0], j, ref[j]);
-//        fprintf(stderr, "sizeof(scoreMatrix...) %"PRId64"\n", sizeof(scoreMatrix[4*path[0] + ref[j]]));
-//        fflush(stderr);
-        last[j] = (uint16_t) scoreMatrix[4*path[0] + ref[j]];
-    }
-
-    //Iterate over the rows
-    for(i=1; i<pathLen; i++) {
-        for(j=i; j<refLen; j++) {
-            cur[j] = last[j-1]+scoreMatrix[4*path[i] + ref[j]];
-            assert(cur[j] >= last[j-1]);
-        }
-        tmp = last;
-        last = cur;
-        cur = tmp;
-    }
-
-    //Find the lowest score of the last row, which dictates begin/end
-    for(j=pathLen; j<refLen; j++) {
-        if(last[j]<best) {
-            best = last[j];
-            best_j = j;
+    for(i=0; i<refLen-pathLen+1; i++) {
+        score = getScore(ref+i, path, pathLen, best, scoreMatrix);
+        if(score < best) {
+            best = score;
+            best_i = i;
         }
     }
-//    fprintf(stderr, "[GlobalAlignment] best=%"PRIu16" best_j %"PRId32"\n", best, best_j); fflush(stderr);
 
     sal->score1 = best;
-    sal->ref_end1 = best_j;
-    sal->ref_begin1 = best_j-pathLen+1;
+    sal->ref_begin1 = best_i;
+    sal->ref_end1 = best_i+pathLen-1;
     sal->read_begin1 = 0;
     sal->read_end1 = pathLen-1;
     sal->cigarLen = 1;
