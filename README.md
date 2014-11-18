@@ -10,6 +10,9 @@ Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C imp
 
 To Do
 =====
+ * If the realigner is given a BED file, it should merge ROIs within 2k of each other
+ * Need to sort a heap before writing it to disk to ensure proper order is maintained
+ * Some alignments seem to be incorrectly changing their start locations!
  * Support multiple threads in realignHeapCore:
     * findBestAlignment
     * updateAlignment

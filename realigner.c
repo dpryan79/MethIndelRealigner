@@ -375,6 +375,9 @@ void updatePos(bam1_t *b, int32_t newStartPos) {
         p = bam_aux_get(b, "OP");
         if(p==NULL) bam_aux_append(b, "OP", 'i', 4, (uint8_t*) &oldpos);
         b->core.pos = newStartPos;
+#ifdef DEBUG
+        fprintf(stderr, "[updatePos] Actually updating b->core.pos to %"PRId32"\n", newStartPos);
+#endif
     }
 }
 
@@ -532,16 +535,20 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             fflush(stderr);
 #endif
             if(refPos + oplen2>= refStartPos && bam_cigar_type(op2)&1) {
-                if(bam_cigar_type(op2) &2) newStartPos += refStartPos;
+                if(bam_cigar_type(op2) &2) newStartPos += refStartPos-refPos;
                 oplen2 = refPos+oplen2-refStartPos;
 #ifdef DEBUG
                 fprintf(stderr, "[updateAlignment] Truncating oplen to %" PRId32 "\n", oplen2);
+                if(bam_cigar_type(op2) &2) fprintf(stderr, "[updateAlignment] Moving start to %" PRId32 "\n", newStartPos);
 #endif
                 refPos = refStartPos;
                 break;
             }
             if(bam_cigar_type(op2) &2) {//OP consumes the reference
                 newStartPos += oplen2;
+#ifdef DEBUG
+                fprintf(stderr, "[updateAlignment] Moving start to %" PRId32 "\n", newStartPos);
+#endif
             }
             if(bam_cigar_type(op2) &1) {//OP consumes the query
                 refPos += oplen2;
@@ -698,7 +705,7 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     fprintf(stderr, "[updateAlignment] Final CIGAR ");
     for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);
     fprintf(stderr, "\n");
-    if(newStartPos != -1) fprintf(stderr, "[updateAlignment] new alignment starting position %" PRId32 "\n", newStartPos);
+    if(newStartPos != -1) fprintf(stderr, "[updateAlignment] possible new alignment starting position %" PRId32 "\n", newStartPos);
     fflush(stderr);
 #endif
     if(newStartPos != -1) updatePos(b, newStartPos);
@@ -794,7 +801,7 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
         fprintf(stderr, "[alignReads2Paths] readal[%i]->ref_begin1 %" PRId32 " ref_end1 %" PRId32 "\n", i, readal[i]->ref_begin1, readal[i]->ref_end1);
         fprintf(stderr, "[alignReads2Paths] read_begin1 %" PRId32 " read_end1 %" PRId32 "\n", readal[i]->read_begin1, readal[i]->read_end1);
         fprintf(stderr, "[alignReads2Paths] CIGAR ");
-        for(j=0; j<readal[i]->cigarLen; j++) fprintf(stderr, "%" PRIu32 "%c", cigar_int_to_len(readal[i]->cigar[j]), cigar_int_to_op(readal[i]->cigar[j]));
+        for(j=0; j<readal[i]->cigarLen; j++) fprintf(stderr, "%" PRIu32 "%c", bam_cigar_oplen(readal[i]->cigar[j]), BAM_CIGAR_STR[bam_cigar_op(readal[i]->cigar[j])]);
         fprintf(stderr, "\n");
         fflush(stderr);
 #endif

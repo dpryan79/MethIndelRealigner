@@ -76,7 +76,7 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
 #ifdef DEBUG
             fprintf(stderr, "[processReads] %s in region\n", bam_get_qname(b)); fflush(stderr);
 #endif
-            fprintf(stderr, "%s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[bounds->tid], bounds->start, bounds->end); fflush(stderr);
+            fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[bounds->tid], bounds->start, bounds->end); fflush(stderr);
             heap->heap[0] = b;
             heap->start = bounds->start;
             heap->end = bounds->end;
@@ -96,8 +96,8 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
                 }
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Found %s while in heap of length %i\n", bam_get_qname(b), heap->l); fflush(stderr);
-                fprintf(stderr, "b->core.pos %" PRId32 " endpos %" PRId32 "\n", b->core.pos, bam_endpos(b)-1);
-                fprintf(stderr, "start %"PRId32" end %"PRId32" b->core.pos %" PRId32" %s\n", heap->start, heap->end, b->core.pos, bam_get_qname(b));
+                fprintf(stderr, "[processReads] b->core.pos %" PRId32 " endpos %" PRId32 "\n", b->core.pos, bam_endpos(b)-1);
+                fprintf(stderr, "[processReads] start %"PRId32" end %"PRId32" b->core.pos %" PRId32" %s\n", heap->start, heap->end, b->core.pos, bam_get_qname(b));
 #endif
 inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core.tid) {
                     //If the alignment and the first in the heap have the same pos...
