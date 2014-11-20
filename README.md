@@ -1,7 +1,7 @@
 Note: This isn't even beta quality yet. I don't recommend using it for anything serious at the moment!
 
-MethIndelAligner
-================
+MethIndelRealigner
+==================
 A set of programs to attempt local methylation-aware realignment around indels. This would be most useful in cases where one is performing some type of BS-seq on a human and wants to decrease incorrect methylation calls due to indel-induced misalignments. These programs work by:
  1. Finding InDels in alignments and marking their extent. A MAPQ threshold can be applied to alignments before considering whether they support the existence of an InDel.
  2. Tracking the number of alignments supporting a given InDel and using that to filter possible ROIs (regions of interest) where realignment should be performed.
