@@ -29,5 +29,6 @@ To Do
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
  * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses.
+ * Consider adding a "maximum breadth" parameter. This would limit the maximum number of paths traversing a graph, likely just resulting in not realigning a heap of alignments if this limit is exceeded. This would result in significant speed improvement in low-complexity regions, which probably wouldn't realign well anyway.
  * Add a license (probably MIT-style)
  * Add CRAM support.
