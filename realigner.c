@@ -797,6 +797,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     refLBound = ((*heap)->start-k >= 0) ? (*heap)->start-k : 0;
     refRBound = refLBound + refLen-2*k;
     for(i=0; i<(*heap)->l; i++) {
+        if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
         strand = getStrand((*heap)->heap[i]);
 #ifdef DEBUG
         fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
@@ -808,6 +809,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     uint32_t *CTcounts = calloc(CTpaths->l, sizeof(uint32_t));
     uint32_t *GAcounts = calloc(GApaths->l, sizeof(uint32_t));
     for(i=0; i<(*heap)->l; i++) {
+        if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
         strand = getStrand((*heap)->heap[i]);
         if(readal[i] == NULL) continue;
         if(strand==1) countAlignmentsPerPath(readal[i], CTpaths->l, CTcounts);
@@ -825,6 +827,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     //Pick a best path for each alignment given all of the others and update it
     refLBound = ((*heap)->start-2*k >= 0) ? (*heap)->start-2*k : 0; //The previous bounds were only for extracting subreads
     for(i=0; i<(*heap)->l; i++) {
+        if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
         strand = getStrand((*heap)->heap[i]);
         if(readal[i] == NULL) continue;
         if(strand&1) {
@@ -863,8 +866,9 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     free(GAref);
     int j;
     for(i=0; i<(*heap)->l; i++) {
-        strand = getStrand((*heap)->heap[i]);
+        if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
         if(readal[i] == NULL) continue;
+        strand = getStrand((*heap)->heap[i]);
         if(strand&1) {
             for(j=0; j<CTpaths->l; j++) {
                 free(readal[i][j]->cigar);
@@ -965,33 +969,43 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     }
 
     //Process the reads
-    for(i=0; i<heap->l; i++) bam2kmer(heap->heap[i], k, start, end, filter, ks, CT, GA, len);
+    for(i=0; i<heap->l; i++) {
+        if(heap->heap[i]->core.qual < MINMAPQ) continue;
+        bam2kmer(heap->heap[i], k, start, end, filter, ks, CT, GA, len);
+    }
 
     //Extract the graph paths
+    int32_t maxLen = (MAXINSERT) ? len+MAXINSERT : 0;
     startVertex = strndup(CT, k);
-    CTcycles = getCycles(filter, startVertex, CT+len-k, k, 'G');
+    CTcycles = getCycles(filter, startVertex, CT+len-k, k, 'G', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, CT+len-k); fflush(stdout);
 #endif
-    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G');
+    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G', maxLen);
     snprintf(startVertex, (k+1)*sizeof(char), "%s", GA);
-    GAcycles = getCycles(filter, startVertex, GA+len-k, k, 'C');
+    GAcycles = getCycles(filter, startVertex, GA+len-k, k, 'C', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, GA+len-k); fflush(stdout);
 #endif
-    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C');
+    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C', maxLen);
     free(startVertex);
 
-    //Ensure that the reference path is included (it won't be if it contains a cycle!)
-    CTpaths = addRefPath(CT, len, CTpaths);
-    GApaths = addRefPath(GA, len, GApaths);
+    //Did we get too many paths?
+    if(MAXBREADTH == 0 || (CTpaths->l <= MAXBREADTH && GApaths->l <= MAXBREADTH)) {
+        //Ensure that the reference path is included (it won't be if it contains a cycle!)
+        CTpaths = addRefPath(CT, len, CTpaths);
+        GApaths = addRefPath(GA, len, GApaths);
 
-    //Realign the read portions to the paths
-    if(CTpaths->l + GApaths->l) {
-        realignHeapCore(&heap, CTpaths, GApaths, CT, GA, k);
+        //Realign the read portions to the paths
+        if(CTpaths->l + GApaths->l) {
+            realignHeapCore(&heap, CTpaths, GApaths, CT, GA, k);
+        } else {
+            fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", couldn't find any paths post-assembly!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
+        }
     } else {
-        fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", couldn't find any paths post-assembly!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
+        fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
     }
+
     //Clean up
     free(ks->s);
     free(ks);

@@ -144,9 +144,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
                 realignHeap(heap, k, fai);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
-            if(status==2){ fprintf(stderr, "Before heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             heap = writeHeapUntil(of, hdr, heap, depth);
-            if(status==2){ fprintf(stderr, "After heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             if(heap->l) {//The heap wasn't flushed
                 fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
                 goto inheap; //Yeah yeah, I know
@@ -200,6 +198,8 @@ void usage(char *prog) {
 "\nNote that input.bam must be coordinate-sorted and indexed. Similarly,\n"
 "reference.fa must be indexed with samtools faidx.\n"
 "\nOPTIONS\n"
+"-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
+"         step or to realign it in the realignment step. The default is 10.\n"
 "-k INT   The k-mer size to use. If you manually ran the TargetCreator, the\n"
 "         setting you used there should match. This must be an odd number.\n"
 "         Default is 17.\n"
@@ -214,8 +214,14 @@ void usage(char *prog) {
 "         is ignored if you supply a BED file. The default is 4, meaning that\n"
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
 "         it.\n"
-"--ROIqual INT Minimum MAPQ score needed to process an alignment in the target\n"
-"         creation step. This must be >0. The default is 10.\n");
+"--maxInsert INT The maximum insert size that will be looked for. The default is\n"
+"         0, meaning no limit is used. Setting this to your maximum read length\n"
+"         can be useful in repeat regions where there are many misaligned reads.\n"
+"--breadth INT Maximum breadth of the C->T or G->A graph. If more paths are\n"
+"         found in either graph than this, then no realignment will take place.\n"
+"         This effectively limits realignment around very low complexity regions\n"
+"         where the amount of memory and time needed grows exponentially. Setting\n"
+"         this to 0 sets no maximum. This value must be >= 0. The default is 300.\n");
 }
 
 //This should be exanded upon to attempt to index the fasta and BAM files if needed
@@ -225,13 +231,17 @@ int main(int argc, char *argv[]) {
     gzFile bed;
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 17;
-    int ROIdepth = 4, ROIqual = 10, nCompThreads = 1;
+    int ROIdepth = 4, nCompThreads = 1;
     uint32_t total = 0;
+    MAXBREADTH = 300;
+    MAXINSERT = 0;
+    MINMAPQ = 10;
 
     static struct option lopts[] = {
         {"help",     0, NULL, 'h'},
         {"ROIdepth", 1, NULL, 'd'},
-        {"ROIqual",  1, NULL, 'q'}
+        {"breadth",  1, NULL, 1},
+        {"maxInsert",  1, NULL, 2}
     };
 
     while((c = getopt_long(argc, argv, "k:l:D:@:", lopts, NULL)) >= 0) {
@@ -257,10 +267,24 @@ int main(int argc, char *argv[]) {
             ROIdepth = atoi(optarg);
             break;
         case 'q' :
-            ROIqual = atoi(optarg);
+            MINMAPQ = atoi(optarg);
             break;
         case '@' :
             nCompThreads = atoi(optarg);
+            break;
+        case 1 :
+            MAXBREADTH = atoi(optarg);
+            if(MAXBREADTH<0) {
+                fprintf(stderr, "--breadth must be >=0! Resetting it to 0.\n");
+                MAXBREADTH = 0;
+            }
+            break;
+        case 2 :
+            MAXINSERT = atoi(optarg);
+            if(MAXINSERT<0) {
+                fprintf(stderr, "--maxInsert must be >=0! Resetting it to 0.\n");
+                MAXINSERT = 0;
+            }
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -289,7 +313,7 @@ int main(int argc, char *argv[]) {
     } else {
         //Run TargetCreator ourselves
         initTargetNodes();
-        findInDels(fp, hdr, ROIqual, kmer);
+        findInDels(fp, hdr, MINMAPQ, kmer);
         total = depthFilter(ROIdepth);
         fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1);
         fflush(stderr);

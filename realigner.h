@@ -90,6 +90,10 @@ typedef struct {
     int8_t **conv;
 } paths;
 
+int32_t MAXBREADTH; //The maximum number of C->T or G->A paths allowed. If more than this are found, no realignment occurs.
+int32_t MAXINSERT; //The maximum insert size that will be looked for. This limits the depth of graph DFS
+int32_t MINMAPQ; //Minimum MAPQ score an alignment must have to process it.
+
 /* Free memory allocated for a linked-list
  *
  */
@@ -168,9 +172,9 @@ void destroyDFSLL(vertex *v);
 
 //bf is the bloom filter, startSeq/endSeq are the sequences of the first/last vertices, k is the k-mer size, finalChar is C or G, if this is a G->a or C->T graph, respectively
 //The output must be destroyed with destroyDFSLL()
-vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar);
+vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
 
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar);
+paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth);
 
 void destroyPaths(paths *p);
 
