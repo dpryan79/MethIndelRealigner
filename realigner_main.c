@@ -148,7 +148,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
             heap = writeHeapUntil(of, hdr, heap, depth);
             if(status==2){ fprintf(stderr, "After heap->l %" PRId32"\n", heap->l); fflush(stderr);}
             if(heap->l) {//The heap wasn't flushed
-                fprintf(stderr, "%s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
+                fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
                 goto inheap; //Yeah yeah, I know
             }
 #ifdef DEBUG
