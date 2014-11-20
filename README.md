@@ -22,5 +22,4 @@ To Do
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
  * Use a bloom filter to hold visited nodes during graph DFS traversal
- * The Makefile shouldn't have my local settings hard coded! Mention needing htslib (or just make it a submodule).
  * Add a license (probably MIT-style)

@@ -1,12 +1,11 @@
-PREFIX = /home/ryand/bin
-INCLUDE_DIRS = /home/ryand/include
-LIB_DIRS = /home/ryand/lib
+PREFIX = /home/ryand/bin #This can be changed
+INCLUDE_DIRS = htslib
 CC = gcc
 OPTS = -Wall -g #-DDEBUG
 
 OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o SSW/ssw.o realigner.o SemiGlobal.o
 
-.PHONY: all clean
+.PHONY: all clean htslib install
 
 .SUFFIXES:.c .o
 
@@ -15,11 +14,18 @@ all: TargetCreator Realigner
 .c.o:
 	$(CC) -c $(OPTS) -I$(INCLUDE_DIRS) $< -o $@
 
-TargetCreator: TargetCreator.o
-	$(CC) $(OPTS) -I$(INCLUDE_DIRS) -L$(LIB_DIRS) -o TargetCreator TargetCreator.o TargetCreator_main.c -lhts -lz -lpthread
+htslib: 
+	$(MAKE) -C htslib
 
-Realigner: $(OBJS)
-	$(CC) $(OPTS) -I$(INCLUDE_DIRS) -L$(LIB_DIRS) $(OBJS) realigner_main.c -o Realigner -lhts -lz -lpthread -lm
+TargetCreator: htslib TargetCreator.o
+	$(CC) $(OPTS) -I$(INCLUDE_DIRS) -o TargetCreator TargetCreator.o htslib/libhts.a TargetCreator_main.c -lz -lpthread
+
+Realigner: $(OBJS) htslib
+	$(CC) $(OPTS) -I$(INCLUDE_DIRS) $(OBJS) htslib/libhts.a realigner_main.c -o Realigner -lz -lpthread -lm
 
 clean:
 	rm -f *.o TargetCreator Realigner
+	make --directory=htslib clean
+
+install: TargetCreator Realigner
+	install TargetCreator Realigner $(PREFIX)
