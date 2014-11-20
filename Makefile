@@ -3,7 +3,7 @@ INCLUDE_DIRS = htslib
 CC = gcc
 OPTS = -Wall -g #-DDEBUG
 
-OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o SSW/ssw.o realigner.o SemiGlobal.o
+OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o
 
 .PHONY: all clean htslib install
 

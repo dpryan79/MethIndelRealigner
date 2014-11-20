@@ -1,8 +1,5 @@
 #include "realigner.h"
 #include "htslib/faidx.h"
-#ifdef SSW
-#include "SSW/ssw.h"
-#endif
 
 char int2base[32] = {0, 'A', 'T', 0, 'G', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N', \
                      0, 'A', 'C', 0, 'A', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N'};
@@ -291,26 +288,6 @@ int8_t *char2int(char *seq, int len) {
 //Given a set of alignments and a score, return the alignment with that score with the highest count
 //Return -1 if there is no best alignment, which will result in the read not being realigned (we should mark these)
 int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts, int32_t readLen) {
-#ifdef SSW
-    int32_t best=-1, bestScore = -1, i;
-    uint32_t bestCount = 0;
-    uint16_t bestScore = 0xFFFF;
-
-    //Get the maximum score
-    for(i=0; i<len; i++)
-        if(al[i]->score1 > bestScore && al[i]->cigarLen == 1 && readLen == al[i]->read_end1-al[i]->read_begin1)
-            bestScore = al[i]->score1;
-
-    //Given a score, find the path with the highest count
-    for(i=0; i<len; i++) {
-        if(al[i]->score1 == bestScore && counts[i] > bestCount && al[i]->cigarLen == 1 && readLen == al[i]->read_end1-al[i]->read_begin1) {
-            bestCount = counts[i];
-            best = i;
-        }
-    }
-
-    return best;
-#else
     uint16_t bestScore = 0xFFFF;
     uint32_t bestCount = 0;
     int32_t i, best = -1;
@@ -327,31 +304,10 @@ int32_t findBestAlignment(s_align **al, int32_t len, uint32_t *counts, int32_t r
     }
 
     return best;
-#endif
 }
 
 //Count the number of best-stratum alignments per path
 void countAlignmentsPerPath(s_align** al, int32_t len, uint32_t *counts) {
-#ifdef SSW
-    int32_t bestScore = -1, i;
-
-    //Get the maximum score
-    for(i=0; i<len; i++)
-        if(al[i]->score1 > bestScore && al[i]->cigarLen == 1) bestScore = al[i]->score1;
-
-#ifdef DEBUG
-    fprintf(stderr, "[countAlignmentsPerPath] bestScore is %" PRId32 "\n", bestScore);
-#endif
-    //Increment the counter if score1==bestScore
-    for(i=0; i<len; i++) {
-        if(al[i]->score1 == bestScore && al[i]->cigarLen == 1) {
-            if(counts[i] < 0xFFFFFFFF) counts[i]++;
-#ifdef DEBUG
-            fprintf(stderr, "[countAlignmentsPerPath] Incrementing %" PRId32 "\n", i);
-#endif
-        }
-    }
-#else
     uint16_t bestScore = 0xFFFF;
     int32_t i;
     for(i=0;i<len;i++) {
@@ -364,7 +320,6 @@ void countAlignmentsPerPath(s_align** al, int32_t len, uint32_t *counts) {
             if(counts[i] < 0xFFFFFFFF) counts[i]++;
         }
     }
-#endif
 }
 
 //Update b->core.pos, adding an OP aux tag if needed
@@ -747,9 +702,6 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
                            //   A  C     G           T                    N
     int8_t int2small[16] = {-1, 0, 1,-1, 1,-1,-1, 0, 2,-1,-1,-1,-1,-1,-1, 3};
     int32_t *positions, i, subreadL;
-#ifdef SSW
-    s_profile *s;
-#endif
     s_align **readal = malloc(sizeof(s_align*)*p->l);
     assert(readal);
 #ifdef DEBUG
@@ -784,15 +736,8 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 #endif
 
     //Align
-#ifdef SSW
-    s = ssw_init((*subreadSeq), subreadL, scoreMatrix, 4, (2*subreadL < 255) ? 0: 1);
-#endif
     for(i=0; i<p->l; i++) {
-#ifdef SSW
-        readal[i] = ssw_align(s, p->conv[i], p->len[i], 3, 1, 2, 0, 0, 15);
-#else
         readal[i] = GlobalAlignment(p->conv[i], p->len[i], *subreadSeq, subreadL);
-#endif
 #ifdef DEBUG
         fprintf(stderr, "[alignReads2Paths] ref[%i] ", i);
         for(j=0; j<p->len[i]; j++) fprintf(stderr, "%"PRId8, p->conv[i][j]);
@@ -809,10 +754,6 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 
     //Clean up
     free(positions);
-#ifdef SSW
-    init_destroy(s);
-#endif
-
     return(readal);
 }
 
@@ -926,41 +867,25 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
         if(readal[i] == NULL) continue;
         if(strand&1) {
             for(j=0; j<CTpaths->l; j++) {
-#ifdef SSW
-                align_destroy(readal[i][j]);
-#else
                 free(readal[i][j]->cigar);
                 free(readal[i][j]);
-#endif
             }
         } else {
             for(j=0; j<GApaths->l; j++) {
-#ifdef SSW
-                align_destroy(readal[i][j]);
-#else
                 free(readal[i][j]->cigar);
                 free(readal[i][j]);
-#endif
             }
         }
         free(readal[i]);
     }
     free(readal);
     for(i=0; i<CTpaths->l; i++) {
-#ifdef SSW
-        align_destroy(CTal[i]);
-#else
         free(CTal[i]->cigar);
         free(CTal[i]);
-#endif
     }
     for(i=0; i<GApaths->l; i++) {
-#ifdef SSW
-        align_destroy(GAal[i]);
-#else
         free(GAal[i]->cigar);
         free(GAal[i]);
-#endif
     }
     free(CTal);
     free(GAal);

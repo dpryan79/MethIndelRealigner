@@ -7,9 +7,6 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#ifdef SSW
-#include "SSW/ssw.h"
-#else
 /*! @typedef structure of the alignment result
  @field score1      the best alignment score
  @field ref_begin1  0-based best alignment beginning position on reference
@@ -19,7 +16,8 @@
  @field cigar       best alignment cigar, as in htslib
  @field cigarLen    length of the cigar string; cigarLen = 0 when the best
                     alignment path is not available
- @discussion This is basically a subset of the s_align struct in SSW.
+ @discussion This is basically a subset of the s_align struct in SSW, which used
+ to be used for Smith-Waterman realignment to paths.
 */
 typedef struct {
     uint16_t score1;
@@ -30,7 +28,6 @@ typedef struct {
     uint32_t* cigar;
     int32_t cigarLen;
 } s_align;
-#endif
 
 /*! @typedef
  @abstract This will form an element in a linked list of possible InDel Haplotypes.
