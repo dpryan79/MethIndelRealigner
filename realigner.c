@@ -510,6 +510,22 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
             }
             oplen2 = 0;
         }
+        //Ensure that we don't start a CIGAR string with something like 5D
+        if(oplen2 == 0) {
+            op2 = bam_cigar_op(al->cigar[ref_cigar_opnum]);
+            oplen2 = bam_cigar_oplen(al->cigar[ref_cigar_opnum]);
+            if((bam_cigar_type(op2)&1) == 0) {//D
+#ifdef DEBUG
+                fprintf(stderr, "[updateAlignment] The next CIGAR op is %"PRId32"%c, which we can skip!\n", oplen2, BAM_CIGAR_STR[op2]);
+                fprintf(stderr, "[updateAlignment] moving start to %"PRId32"\n", newStartPos+oplen2);
+#endif
+                newStartPos += oplen2;
+                ref_cigar_opnum++;
+             } else {
+                 op2 = bam_cigar_op(al->cigar[ref_cigar_opnum-1]);
+             }
+             oplen2 = 0;
+        }
 #ifdef DEBUG
         fprintf(stderr, "[updateAlignment] 5' underhang CIGAR ");
         for(i=0; i<n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(newCIGARArray[i]), BAM_CIGAR_STR[bam_cigar_op(newCIGARArray[i])]);

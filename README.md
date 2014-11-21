@@ -19,7 +19,6 @@ To Do
 =====
  * If the realigner is given a BED file, it should merge ROIs within 2k of each other
  * Need to sort a heap before writing it to disk to ensure proper order is maintained
- * Some alignments seem to be incorrectly changing their start locations!
  * Support multiple threads in realignHeapCore:
     * findBestAlignment
     * updateAlignment
@@ -28,7 +27,6 @@ To Do
  * Compare time requirements with BisSNP
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
- * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses.
- * Consider adding a "maximum breadth" parameter. This would limit the maximum number of paths traversing a graph, likely just resulting in not realigning a heap of alignments if this limit is exceeded. This would result in significant speed improvement in low-complexity regions, which probably wouldn't realign well anyway.
+ * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
  * Add a license (probably MIT-style)
  * Add CRAM support.
