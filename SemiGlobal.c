@@ -137,7 +137,6 @@ skip:
     j = refLen-k+1;
     oplen=k-1;
     while(i>k && j>k) {
-//        fprintf(stderr, "i %"PRId64" j %"PRId64"\n", i, j);
         //Try to perform the last CIGAR op again
         if(op == 0) { //M, diag
             if(mat[i][j] & 2) {
@@ -175,7 +174,6 @@ skip:
     }
 
     //Finish up
-//    fprintf(stderr, "Final i %"PRId64" j %"PRId64"\n", i, j);
     if(i==k && j==k) {
         if(op != 0) {
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen);

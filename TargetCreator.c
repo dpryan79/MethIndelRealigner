@@ -238,6 +238,20 @@ void findInDels(htsFile *fp, bam_hdr_t *hdr, int minMAPQ, int k) {
         }
     }
 
+    //Ensure that all ROIs are at least k apart
+    lastTargetNode = firstTargetNode->next;
+    while(lastTargetNode->next) {
+        i = TargetNodeCmp(lastTargetNode,lastTargetNode->next, k);
+        assert(i<=0);
+        if(i==0) {
+            lastTargetNode->end = lastTargetNode->next->end;
+            lastTargetNode->count += (lastTargetNode->count+lastTargetNode->next->count > lastTargetNode->count)?lastTargetNode->next->count:0xFFFFFFFF;
+            removeNode(lastTargetNode->next);
+        } else {
+            lastTargetNode = lastTargetNode->next;
+        }
+    }
+
 quit:
     bam_destroy1(b);
 }
