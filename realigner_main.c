@@ -161,7 +161,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 }
 
 //return -1 on error
-int bed2list(gzFile fp, bam_hdr_t *hdr) {
+int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
     int ret;
     char *s;
     InDel *node;
@@ -180,6 +180,13 @@ int bed2list(gzFile fp, bam_hdr_t *hdr) {
         node->start = strtol(s, NULL, 10);
         s = strtok(NULL, "\n");
         node->end = strtoul(s, NULL, 10);
+        if(lastTargetNode != firstTargetNode) {
+            if(lastTargetNode->tid == node->tid && lastTargetNode->end+2*k > node->start) {
+                lastTargetNode->end = node->end;
+                free(node);
+                continue;
+            }
+        }
         insertAfter(node, lastTargetNode);
         lastTargetNode = lastTargetNode->next;
         total++;
@@ -308,7 +315,7 @@ int main(int argc, char *argv[]) {
     initTargetNodes();
 
     if(bedSet) {
-        assert(bed2list(bed, hdr) == 0); //This should be better handled
+        assert(bed2list(bed, hdr, kmer) == 0); //This should be better handled
         gzclose(bed);
     } else {
         //Run TargetCreator ourselves
