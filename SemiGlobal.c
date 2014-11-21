@@ -18,11 +18,12 @@ void pushSGCIGAR(uint32_t **cigar, int32_t l, int32_t *m, int32_t op, int32_t op
     (*cigar)[l] = bam_cigar_gen(oplen, op);
 }
 
-uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, uint16_t *scoreMatrix) {
+uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, uint16_t scoreMatrix[4][4]) {
     int32_t i;
     uint16_t score = 0;
     for(i=0; i<seqLen; i++) {
-        score += scoreMatrix[4*seq[i] + ref[i]];
+//        score += scoreMatrix[4*seq[i] + ref[i]];
+        score += scoreMatrix[seq[i]][ref[i]];
         if(score >= maxScore) break;
     }
     return score;
@@ -34,10 +35,10 @@ s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pat
     uint16_t nmatch = 1, mismatch = 3, best = 0xFFFF, score;
     uint32_t *cigar = malloc(sizeof(uint32_t));
                               //A  C/G       T         N reference sequence
-    uint16_t scoreMatrix[16] = {0, mismatch, mismatch, 0,
-                               mismatch, 0, mismatch, 0,
-                               mismatch, mismatch, 0, 0,
-                               nmatch, nmatch, nmatch, 0};
+    uint16_t scoreMatrix[4][4] = {{0, mismatch, mismatch, 0},
+                              {mismatch, 0, mismatch, 0},
+                              {mismatch, mismatch, 0, 0},
+                              {nmatch, nmatch, nmatch, 0}};
     s_align *sal = malloc(sizeof(s_align));
     assert(sal);
     assert(cigar);
