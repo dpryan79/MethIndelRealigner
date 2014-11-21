@@ -251,7 +251,7 @@ int main(int argc, char *argv[]) {
         {"maxInsert",  1, NULL, 2}
     };
 
-    while((c = getopt_long(argc, argv, "k:l:D:@:", lopts, NULL)) >= 0) {
+    while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
             usage(argv[0]);
