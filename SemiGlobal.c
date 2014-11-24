@@ -22,7 +22,6 @@ uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, u
     int32_t i;
     uint16_t score = 0;
     for(i=0; i<seqLen; i++) {
-//        score += scoreMatrix[4*seq[i] + ref[i]];
         score += scoreMatrix[seq[i]][ref[i]];
         if(score >= maxScore) break;
     }
@@ -34,11 +33,10 @@ s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pat
     int32_t i, best_i = 0;
     uint16_t nmatch = 1, mismatch = 3, best = 0xFFFF, score;
     uint32_t *cigar = malloc(sizeof(uint32_t));
-                              //A  C/G       T         N reference sequence
     uint16_t scoreMatrix[4][4] = {{0, mismatch, mismatch, 0},
-                              {mismatch, 0, mismatch, 0},
-                              {mismatch, mismatch, 0, 0},
-                              {nmatch, nmatch, nmatch, 0}};
+                                  {mismatch, 0, mismatch, 0},
+                                  {mismatch, mismatch, 0, 0},
+                                  {nmatch, nmatch, nmatch,0}};
     s_align *sal = malloc(sizeof(s_align));
     assert(sal);
     assert(cigar);
@@ -66,16 +64,17 @@ s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pat
 //Perform semi-global alignment using a Needleman-Wunsch like algorithm. Since the first and last k of the 
 //path and reference are known to be identical, this can ensure complete overlap. In the future, the
 //mismatch, gap open, and gap extend penalties could be user specified.
+//This could be made slightly faster by removing the topmost and leftmost k rows/columns, making the matrix (n-2k+1)*(m-2k+1)
 s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k) {
     int64_t i, j, *last, *cur, *tmp;
     int8_t **mat;
     int64_t nmatch = -1, mismatch = -3, gapOpen = -5, gapExtend = -3, left, top, diag, best;
     int32_t op = 0, oplen = k, maxCigar = 1;
     uint32_t *cigar = NULL, tmpCIGAR;
-    int64_t scoreMatrix[16] = {0, mismatch, mismatch, nmatch,
-                               mismatch, 0, mismatch, nmatch,
-                               mismatch, mismatch, 0, nmatch,
-                               nmatch, nmatch, nmatch, 0};
+    int64_t scoreMatrix[4][4] = {{0, mismatch, mismatch, 0},
+                                 {mismatch, 0, mismatch, 0},
+                                 {mismatch, mismatch, 0, 0},
+                                 {nmatch, nmatch, nmatch,0}};
     s_align *sal = malloc(sizeof(s_align));
     assert(sal);
 
@@ -117,7 +116,7 @@ skip:
         for(j=1; j<refLen+2-k; j++) {
             left = cur[j-1] + gapExtend + ((mat[i][j-1] & 4)?0:gapOpen);
             top = last[j] + gapExtend + ((mat[i-1][j] & 1)?0:gapOpen);
-            diag = last[j-1] + scoreMatrix[4*path[i-1] + ref[j-1]];
+            diag = last[j-1] + scoreMatrix[path[i-1]][ref[j-1]];
             best = left;
             if(best < top) best = top;
             if(best < diag) best = diag;
