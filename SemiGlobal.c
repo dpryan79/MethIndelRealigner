@@ -28,7 +28,8 @@ uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, u
     return score;
 }
 
-//This method should average O(N*(M-N)/2 time, which is ~2x faster than GlobalAlignment()
+//This method should average O(N*(M-N)/2 time, which is ~2x faster than GlobalAlignment().
+//The likelyStartPos heuristic speeds this up significantly
 s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartPos) {
     int32_t i, best_i = -1;
     uint16_t nmatch = 1, mismatch = 3, score;

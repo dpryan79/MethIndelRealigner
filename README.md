@@ -11,7 +11,7 @@ A set of programs to attempt local methylation-aware realignment around indels. 
  6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
  7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
 
-Paths are aligned to the reference sequence using a global alignment (Needleman-Wunsch) approach. BAM/CRAM alignments are realigned to paths using a global ungapped alignment approach (since there will exist a path to which an ungapped alignment can be made). This is significantly faster than regular Needleman-Wunsch, taking on average `O(N*(M-N)/2)` time, for alignment length N and path length M.
+Paths are aligned to the reference sequence using a global alignment (Needleman-Wunsch) approach. BAM/CRAM alignments are realigned to paths using a global ungapped alignment approach (since there will exist a path to which an ungapped alignment can be made). This is significantly faster than regular Needleman-Wunsch.
 
 Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C implementation is from [Peter Scott](https://github.com/PeterScott/murmur3) and MurmurHash itself is by [Austin Appleby](https://code.google.com/p/smhasher/wiki/MurmurHash3). Both of these are in the public domain.
 
