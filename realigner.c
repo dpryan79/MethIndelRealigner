@@ -1,5 +1,6 @@
 #include "realigner.h"
 #include "htslib/faidx.h"
+#include <ctype.h>
 
 char int2base[32] = {0, 'A', 'T', 0, 'G', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N', \
                      0, 'A', 'C', 0, 'A', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N'};
@@ -109,7 +110,7 @@ int getStrand(bam1_t *b) {
     }
 }
 
-void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *ks, char *CT, char *GA, int32_t refLen) {
+void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *ks, char *CT, char *GA, int32_t refLen, int32_t *maxIns, int32_t *maxDel) {
     int i, start2, end2;
     int offset = (getStrand(b) & 1) ? 0 : 16;
     int32_t *positions = NULL; //Could reuse this like a kstring_t
@@ -140,6 +141,14 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
     fprintf(stderr, "[bam2kmer] positions[start2] %"PRId32" start %"PRId32"\n", positions[start2], start);
     fprintf(stderr, "[bam2kmer] positions[end2] %"PRId32" end %"PRId32"\n", positions[end2], end);
 #endif
+
+    //Do we need to grow the maxIns or maxDel variables?
+    int32_t diff = end2-start2-(positions[end2]-positions[start2]);
+    if(diff > 0) { //Read supports an insert
+        if(diff > *maxIns) *maxIns = diff;
+    } else if(diff < 0) { //read supports a deletion
+        if(-1*diff > *maxDel) *maxDel = -1*diff;
+    }
 
     //Grow ks as needed
     if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1)
@@ -337,7 +346,7 @@ void updatePos(bam1_t *b, int32_t newStartPos) {
 }
 
 //Update the CIGAR string, appending an OC if needed
-void updateCigar(bam1_t *b, int32_t *arr, int len) {
+void updateCigar(bam1_t *b, uint32_t *arr, int len) {
     uint8_t *p;
     size_t remaining_data_len;
     int32_t i;
@@ -385,7 +394,7 @@ void updateCigar(bam1_t *b, int32_t *arr, int len) {
     b->core.n_cigar = len;
 }
 
-int32_t *pushCIGAR(int32_t *CIGAR, int32_t n_cigar, int32_t *max_cigar, int32_t op, int32_t oplen) {
+uint32_t *pushCIGAR(uint32_t *CIGAR, int32_t n_cigar, int32_t *max_cigar, int32_t op, int32_t oplen) {
     if(n_cigar+1 >= *max_cigar) {
         (*max_cigar)++;
         kroundup32((*max_cigar));
@@ -395,7 +404,53 @@ int32_t *pushCIGAR(int32_t *CIGAR, int32_t n_cigar, int32_t *max_cigar, int32_t 
     CIGAR[n_cigar] = bam_cigar_gen(oplen, op);
     return CIGAR;
 }
-    
+
+//Determine the mismatch-only edit distance between an alignment and a reference sequence
+//This function is unaware of methylation
+int32_t editDistance(bam1_t *b, int32_t pos, uint32_t *CIGAR, int32_t n_cigar, int32_t *covered) {  
+    int32_t i, j, k, op, oplen;
+    int len;
+    int32_t end = pos-1, distance = 0;
+    char *seq = NULL;
+    char conv[16] = {0, 'A', 'C', 0, 'G', 0, 0, 0, 'T', 0, 0, 0, 0, 0, 0, 'N'};
+    *covered = 0;
+
+    //Get the sequence
+    for(i=0; i<n_cigar; i++) {
+        op = bam_cigar_op(CIGAR[i]);
+        oplen = bam_cigar_oplen(CIGAR[i]);
+        if(bam_cigar_type(op)&2) end += oplen;
+        if(bam_cigar_type(op)==3) *covered += oplen;
+    }
+    seq = faidx_fetch_seq(GLOBAL_FAI, faidx_iseq(GLOBAL_FAI, b->core.tid), pos, end, &len);
+
+    oplen = 0;
+    op = 6;
+    j = 0;
+    k = 0;
+    for(i=0; i<b->core.l_qseq; i++) {
+loop:   while(oplen == 0) {
+            op = bam_cigar_op(CIGAR[k]);
+            oplen = bam_cigar_oplen(CIGAR[k++]);
+        }
+        if(bam_cigar_type(op) == 3) { //M, =, or X
+            if(conv[bam_seqi(bam_get_seq(b), i)] != toupper(seq[j])) distance++;
+            j++;
+        } else if(bam_cigar_type(op) == 2) {
+            j += oplen;
+            oplen = 0;
+            goto loop;
+        } else if(bam_cigar_type(op) == 0) {
+            oplen = 0;
+            goto loop;
+        }
+        oplen--;
+    }
+
+    free(seq);
+    return distance;
+}
+
 /*
 readStartPos	0-based position in the read that denotes the 5'-most base used in the alignment
 readEndPos	0-based position in the read that denotes the 3'-most base used in the alignment
@@ -404,7 +459,7 @@ refStartPos	0-based position in the reference that denotes the 5'-most base used
 refEndPos	0-based position in the reference that denotes the 3'-most base used in the alignment
 */
 bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t readEndPos, int32_t refStartPos, int32_t refStart, int32_t refEndPos) {
-    int32_t *newCIGARArray = malloc(sizeof(uint32_t) * b->core.n_cigar);
+    uint32_t *newCIGARArray = malloc(sizeof(uint32_t) * b->core.n_cigar);
     int n_cigar = 0, max_cigar = b->core.n_cigar, read_cigar_opnum = 0, ref_cigar_opnum = 0;
     int32_t oplen = 0, op=0,oplen2=0, op2=0, readPos = 0, newStartPos = -1;
     int32_t refPos = 0;
@@ -679,6 +734,20 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
     if(newStartPos != -1) fprintf(stderr, "[updateAlignment] possible new alignment starting position %" PRId32 "\n", newStartPos);
     fflush(stderr);
 #endif
+    //Is the new alignment actually better than the old one as measured by edit distance of the whole length?
+    int32_t cur_covered, new_covered;
+    int32_t cur_distance = editDistance(b, b->core.pos, bam_get_cigar(b), b->core.n_cigar, &cur_covered);
+    int32_t new_distance = editDistance(b, (newStartPos>=0)?newStartPos:b->core.pos, newCIGARArray, n_cigar, &new_covered);
+    if(new_distance > cur_distance && new_distance-cur_distance >= new_covered - cur_covered) { //Status quo is better
+#ifdef DEBUG
+        fprintf(stderr, "[updateAlignment] The old alignment had a lower edit distance, keeping it.\n");
+        fflush(stderr);
+#endif
+        free(newCIGARArray);
+        return(b);
+    }
+    
+    //someMagicFunction()
     if(newStartPos != -1) updatePos(b, newStartPos);
     assert(n_cigar>0);
     //Ensure that the new CIGAR string matchs b->core.l_qseq
@@ -714,7 +783,7 @@ s_align **alignPaths2Ref(paths *p, int8_t *ref, int32_t refLen, char *refSeq, in
 }
 
 //Align a read to the appropriate set of paths
-s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **subreadSeq, paths *p, int32_t refLBound, int32_t refRBound, int32_t *readLBound, int32_t *readRBound) {
+s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **subreadSeq, paths *p, int32_t refLBound, int32_t refRBound, int32_t *readLBound, int32_t *readRBound, int k) {
                            //   A  C     G           T                    N
     int8_t int2small[16] = {-1, 0, 1,-1, 1,-1,-1, 0, 2,-1,-1,-1,-1,-1,-1, 3};
     int32_t *positions, i, subreadL;
@@ -753,7 +822,7 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 
     //Align
     for(i=0; i<p->l; i++) {
-        readal[i] = GlobalAlignment(p->conv[i], p->len[i], *subreadSeq, subreadL);
+        readal[i] = GlobalAlignment(p->conv[i], p->len[i], *subreadSeq, subreadL, k, positions[*readLBound]-refLBound+k);
 #ifdef DEBUG
         fprintf(stderr, "[alignReads2Paths] ref[%i] ", i);
         for(j=0; j<p->len[i]; j++) fprintf(stderr, "%"PRId8, p->conv[i][j]);
@@ -818,7 +887,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
 #ifdef DEBUG
         fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
 #endif
-        readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i);
+        readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i, k);
     }
 
     //Count number of best/equally best alignments/path
@@ -945,12 +1014,12 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 //k is the kmer
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     bf *filter = bf_init(heap->end-heap->start, k);
-    int32_t i, start, end, start2;
+    int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     kstring_t *ks = calloc(1, sizeof(kstring_t));
     char *CT, *GA, *startVertex;
     paths *CTpaths, *GApaths;
     int len;
-    vertex *CTcycles, *GAcycles;
+    vertex *CTcycles = NULL, *GAcycles = NULL;
     uint64_t h;
 
     //Add the reference sequence
@@ -987,23 +1056,24 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     //Process the reads
     for(i=0; i<heap->l; i++) {
         if(heap->heap[i]->core.qual < MINMAPQ) continue;
-        bam2kmer(heap->heap[i], k, start, end, filter, ks, CT, GA, len);
+        bam2kmer(heap->heap[i], k, start, end, filter, ks, CT, GA, len, &maxIns, &maxDel);
     }
 
     //Extract the graph paths
-    int32_t maxLen = (MAXINSERT) ? len+MAXINSERT : 0;
+    int32_t maxLen = len+maxIns;
+    if(MAXINSERT && MAXINSERT < maxIns) maxLen = len+MAXINSERT;
     startVertex = strndup(CT, k);
-    CTcycles = getCycles(filter, startVertex, CT+len-k, k, 'G', maxLen);
+    if(NOCYCLES) CTcycles = getCycles(filter, startVertex, CT+len-k, k, 'G', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, CT+len-k); fflush(stdout);
 #endif
-    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G', maxLen);
+    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G', maxLen, len-maxDel);
     snprintf(startVertex, (k+1)*sizeof(char), "%s", GA);
-    GAcycles = getCycles(filter, startVertex, GA+len-k, k, 'C', maxLen);
+    if(NOCYCLES) GAcycles = getCycles(filter, startVertex, GA+len-k, k, 'C', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, GA+len-k); fflush(stdout);
 #endif
-    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C', maxLen);
+    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C', maxLen, len-maxDel);
     free(startVertex);
 
     //Did we get too many paths?

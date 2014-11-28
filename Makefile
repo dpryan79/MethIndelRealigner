@@ -1,11 +1,11 @@
 PREFIX = /home/ryand/bin #This can be changed
 INCLUDE_DIRS = htslib
 CC = gcc
-OPTS = -Wall -g #-DDEBUG
+OPTS = -Wall -g -O2 #-DDEBUG
 
 OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o
 
-.PHONY: all clean htslib install
+.PHONY: all clean htslib install clean-all
 
 .SUFFIXES:.c .o
 
@@ -25,6 +25,8 @@ Realigner: $(OBJS) htslib
 
 clean:
 	rm -f *.o TargetCreator Realigner
+
+clean-all: clean
 	make --directory=htslib clean
 
 install: TargetCreator Realigner

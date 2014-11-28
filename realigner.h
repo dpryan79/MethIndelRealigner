@@ -93,6 +93,8 @@ typedef struct {
 int32_t MAXBREADTH; //The maximum number of C->T or G->A paths allowed. If more than this are found, no realignment occurs.
 int32_t MAXINSERT; //The maximum insert size that will be looked for. This limits the depth of graph DFS
 int32_t MINMAPQ; //Minimum MAPQ score an alignment must have to process it.
+faidx_t *GLOBAL_FAI; //In order to ensure that a realignment is best, a deeply buried function needs access to the full reference sequence
+int32_t NOCYCLES; //Whether to allow cycles in a path or not (default: allowed).
 
 /* Free memory allocated for a linked-list
  *
@@ -174,7 +176,7 @@ void destroyDFSLL(vertex *v);
 //The output must be destroyed with destroyDFSLL()
 vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
 
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth);
+paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth);
 
 void destroyPaths(paths *p);
 
@@ -198,5 +200,5 @@ uint64_t hash_seq(char *seq, int len);
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai);
 
 //needlemanWunsch.c
-s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen);
+s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartpos);
 s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k);

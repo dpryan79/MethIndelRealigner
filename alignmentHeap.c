@@ -66,15 +66,6 @@ alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap,
     }
     lpos = b->core.pos;
     //Keep sort order, processing reads with same start pos
-/*
-fprintf(stderr, "[writeHeapUntil] read from %"PRId32"-%"PRId32" next starts %"PRId32" %"PRId32"\n", reg.start, reg.end, lastTargetNode->start, newl);
-int i;
-if(reg.end-reg.start>10000) {
-    fprintf(stderr, "[writeHeapUntil] %s just got weird!\n", bam_get_qname(b));
-    for(i=0; i<b->core.n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(bam_get_cigar(b)[i]), BAM_CIGAR_STR[bam_cigar_op(bam_get_cigar(b)[i])]);
-    fprintf(stderr, "\n"); fflush(stderr);
-}
-*/
     while(b->core.pos == lpos) {
         if(reg.end >= lastTargetNode->start && reg.start < lastTargetNode->end && reg.tid == lastTargetNode->tid) {
             heap->heap[newl++] = b;
@@ -90,14 +81,6 @@ if(reg.end-reg.start>10000) {
         reg.tid = b->core.tid;
         reg.start = b->core.pos;
         reg.end = bam_endpos(b)+1;
-/*
-fprintf(stderr, "[writeHeapUntil] read from %"PRId32"-%"PRId32" next starts %"PRId32" %"PRId32"\n", reg.start, reg.end, lastTargetNode->start, newl);
-if(reg.end-reg.start>10000) {
-    fprintf(stderr, "[writeHeapUntil] %s just got weird!\n", bam_get_qname(b));
-    for(i=0; i<b->core.n_cigar; i++) fprintf(stderr, "%"PRId32"%c", bam_cigar_oplen(bam_get_cigar(b)[i]), BAM_CIGAR_STR[bam_cigar_op(bam_get_cigar(b)[i])]);
-    fprintf(stderr, "\n"); fflush(stderr);
-}
-*/
     }
     //Transfer the remainder over
     for(;cur_i < heap->l; cur_i++) heap->heap[newl++] = heap->heap[cur_i];

@@ -209,7 +209,7 @@ void usage(char *prog) {
 "         step or to realign it in the realignment step. The default is 10.\n"
 "-k INT   The k-mer size to use. If you manually ran the TargetCreator, the\n"
 "         setting you used there should match. This must be an odd number.\n"
-"         Default is 17.\n"
+"         Default is 25.\n"
 "-l FILE  A (possibly gzipped) BED file listing regions to realign around. A\n"
 "         region +/- k will be realigned. It is suggested that you run the\n"
 "         TargetCreator and supply the resulting BED file here.\n"
@@ -221,6 +221,11 @@ void usage(char *prog) {
 "         is ignored if you supply a BED file. The default is 4, meaning that\n"
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
 "         it.\n"
+"\n"
+"Advanced options:\n"
+"         Unless you're familiar with how graph algorithms work, it's unwise to\n"
+"         change these.\n"
+"\n"
 "--maxInsert INT The maximum insert size that will be looked for. The default is\n"
 "         0, meaning no limit is used. Setting this to your maximum read length\n"
 "         can be useful in repeat regions where there are many misaligned reads.\n"
@@ -228,7 +233,22 @@ void usage(char *prog) {
 "         found in either graph than this, then no realignment will take place.\n"
 "         This effectively limits realignment around very low complexity regions\n"
 "         where the amount of memory and time needed grows exponentially. Setting\n"
-"         this to 0 sets no maximum. This value must be >= 0. The default is 300.\n");
+"         this to 0 sets no maximum. This value must be >= 0. The default is 300.\n"
+"--noCycles If you specify this flag, then cycles in paths traversing an InDel\n"
+"         will be avoided. While this is a very good idea in theory (it speeds\n"
+"         things up by preventing alignments to aberrant repeat sequences), in\n"
+"         practice the low information content of bisulfite-converted DNA makes\n"
+"         the presence of cycles very common. While the a path representing the\n"
+"         reference sequence will always be present (regardless of it having\n"
+"         cycles), if you specify --noCycles and happen to choose a setting for\n"
+"         -k that's too low to accurately represent a given path without cycles\n"
+"         then it won't be traversed. While current alignments to that path will\n"
+"         likely be maintained (since realignment will increase the edit\n"
+"         distance, producing realignments that will be rejected in favor of the\n"
+"         initial alignments), new alignments will be impossible. Note that the\n"
+"         maximum and minimum path length is dictated by the alignments\n"
+"         traversing an ROI, so and endless number of cycles won't be followed\n"
+"         when creating paths in any case.\n");
 }
 
 //This should be exanded upon to attempt to index the fasta and BAM files if needed
@@ -237,18 +257,20 @@ int main(int argc, char *argv[]) {
     bam_hdr_t *hdr;
     gzFile bed;
     faidx_t *fai;
-    int c, bedSet=0, depth = 1000, kmer = 17;
+    int c, bedSet=0, depth = 1000, kmer = 25;
     int ROIdepth = 4, nCompThreads = 1;
     uint32_t total = 0;
     MAXBREADTH = 300;
     MAXINSERT = 0;
     MINMAPQ = 10;
+    NOCYCLES = 0;
 
     static struct option lopts[] = {
         {"help",     0, NULL, 'h'},
         {"ROIdepth", 1, NULL, 'd'},
         {"breadth",  1, NULL, 1},
-        {"maxInsert",  1, NULL, 2}
+        {"maxInsert",  1, NULL, 2},
+        {"noCycles", 0, NULL, 3}
     };
 
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
@@ -293,6 +315,9 @@ int main(int argc, char *argv[]) {
                 MAXINSERT = 0;
             }
             break;
+        case 3 :
+            NOCYCLES = 1;
+            break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
             usage(argv[0]);
@@ -332,6 +357,7 @@ int main(int argc, char *argv[]) {
     }
 
     fai = fai_load(argv[optind+1]);
+    GLOBAL_FAI = fai;
     of = sam_open(argv[optind+2], "wb");
     if(nCompThreads>1) bgzf_mt(of->fp.bgzf, nCompThreads, 256);
     sam_hdr_write(of, hdr);

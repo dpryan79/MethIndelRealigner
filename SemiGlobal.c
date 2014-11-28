@@ -29,9 +29,10 @@ uint16_t getScore(int8_t *ref, int8_t *seq, int32_t seqLen, uint16_t maxScore, u
 }
 
 //This method should average O(N*(M-N)/2 time, which is ~2x faster than GlobalAlignment()
-s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen) {
-    int32_t i, best_i = 0;
-    uint16_t nmatch = 1, mismatch = 3, best = 0xFFFF, score;
+s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartPos) {
+    int32_t i, best_i = -1;
+    uint16_t nmatch = 1, mismatch = 3, score;
+    uint16_t best = mismatch * (pathLen>>2); //A heuristic to speed things up a bit
     uint32_t *cigar = malloc(sizeof(uint32_t));
     uint16_t scoreMatrix[4][4] = {{0, mismatch, mismatch, 0},
                                   {mismatch, 0, mismatch, 0},
@@ -42,11 +43,33 @@ s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pat
     assert(cigar);
     cigar[0] = bam_cigar_gen(pathLen, 0);
 
-    for(i=0; i<refLen-pathLen+1; i++) {
-        score = getScore(ref+i, path, pathLen, best, scoreMatrix);
-        if(score < best) {
-            best = score;
-            best_i = i;
+    //Try the most likely start position
+    score = getScore(ref+likelyStartPos, path, pathLen, best, scoreMatrix);
+    if(score < best) {
+        best = score;
+        best_i = likelyStartPos;
+    }
+
+    //Try restricting the score range
+    if(score != 0) {
+        for(i=k; i<refLen-pathLen-k+1; i++) {
+            if(i==likelyStartPos) continue;
+            score = getScore(ref+i, path, pathLen, best, scoreMatrix);
+            if(score < best) {
+                best = score;
+                best_i = i;
+            }
+        }
+    }
+    //If we didn't get a match, then use an unrestricted score range
+    if(best_i == -1) {
+        best = 0xFFFF;
+        for(i=k; i<refLen-pathLen-k+1; i++) {
+            score = getScore(ref+i, path, pathLen, best, scoreMatrix);
+            if(score < best) {
+                best = score;
+                best_i = i;
+            }
         }
     }
 

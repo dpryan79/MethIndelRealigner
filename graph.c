@@ -239,10 +239,10 @@ void appendPath(paths **paths, vertex **stack, int k, char lastChar) {
         len++;
         v = v->prevVertex;
     }
+    len += k; //Otherwise, we'll be a k-mer short!
 #ifdef DEBUG
     fprintf(stderr, "[appendPath] Found a path of length %i\n", len); fflush(stdout);
 #endif
-    len += k; //Otherwise, we'll be a k-mer short!
 
     //If the path length isn't at least 2k+1 in length then it isn't valid
     if(len <= 2*k+1) return;
@@ -278,7 +278,7 @@ void appendPath(paths **paths, vertex **stack, int k, char lastChar) {
 #endif
 }
 
-void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar, vertex **cycles, paths **paths, int32_t depth, int32_t maxDepth) {
+void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar, vertex **cycles, paths **paths, int32_t depth, int32_t maxDepth, int32_t minDepth) {
     if(maxDepth && depth > maxDepth) return;
     vertex *v = calloc(1, sizeof(vertex));
     int i;
@@ -297,6 +297,15 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
         v->nchar = -1; //This isn't set for target
         v->h = hash_seq(v->seq, k) & bf->mask;
         if(cmpVertices(v, target) == 0) { //Reached the target
+            //Is the path long enough?
+            if(depth+1 < minDepth) {
+#ifdef DEBUG
+                fprintf(stderr, "[nextBFSVertex] Found a path, but it was too short.\n");
+#endif
+                free(v->seq);
+                free(v);
+                return;
+            }
 #ifdef DEBUG
             fprintf(stderr, "[nextBFSVertex] %s -> %s (target!)\n", (*stack)->seq, v->seq); fflush(stderr);
 #endif
@@ -322,7 +331,7 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
         (*stack)->nextVertex = v;
         v->prevVertex = *stack;
         *stack = v;
-        nextBFSVertex(bf, stack, target, k, finalChar, cycles, paths, depth+1, maxDepth);
+        nextBFSVertex(bf, stack, target, k, finalChar, cycles, paths, depth+1, maxDepth, minDepth);
         //Pop v back off
         v = *stack;
         *stack = (*stack)->prevVertex;
@@ -336,13 +345,16 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
 
 //Return all paths between the start and end vertex in a graph, ignoring cycles
 //Use a breadth-first search
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth) {
+paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth) {
     int k = strlen(startSeq);
     vertex *stack = makeVertex(startSeq, k, bf->mask);
     vertex *target = makeVertex(endSeq, k, bf->mask);
     paths *paths = initPaths(10);
 
-    nextBFSVertex(bf, &stack, target, k, finalChar, cycles, &paths, k, maxDepth);
+#ifdef DEBUG
+    fprintf(stderr, "[getPaths] Looking for paths between %"PRId32" and %"PRId32" characters long\n", minDepth, maxDepth);
+#endif
+    nextBFSVertex(bf, &stack, target, k, finalChar, cycles, &paths, k, maxDepth, minDepth);
 
 #ifdef DEBUG
     int i;
