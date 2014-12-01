@@ -200,10 +200,12 @@ int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
 }
 
 void usage(char *prog) {
-    fprintf(stderr, "Usage: %s [OPTIONS] input.bam reference.fa output.bam\n", prog);
+    fprintf(stderr, "Usage: %s [OPTIONS] input.bam reference.fa [output.bam]\n", prog);
     fprintf(stderr, 
 "\nNote that input.bam must be coordinate-sorted and indexed. Similarly,\n"
-"reference.fa must be indexed with samtools faidx.\n"
+"reference.fa must be indexed with samtools faidx. If an output file name isn't\n"
+"given, then the output will be written to stdout (so use '>' to redirect to a\n"
+"file). In this case, no attempt will be made to index the output.\n"
 "\nOPTIONS\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
@@ -329,7 +331,7 @@ int main(int argc, char *argv[]) {
         usage(argv[0]);
         return 0;
     }
-    if(argc-optind != 3) {
+    if(argc-optind != 3 && argc-optind != 2) {
         usage(argv[0]);
         return 1;
     }
@@ -358,7 +360,8 @@ int main(int argc, char *argv[]) {
 
     fai = fai_load(argv[optind+1]);
     GLOBAL_FAI = fai;
-    of = sam_open(argv[optind+2], "wb");
+    if(argc-optind==2) of = sam_open("-", "wb"); //stdout
+    else of = sam_open(argv[optind+2], "wb");
     if(nCompThreads>1) bgzf_mt(of->fp.bgzf, nCompThreads, 256);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
@@ -373,6 +376,13 @@ int main(int argc, char *argv[]) {
     sam_close(fp);
     sam_close(of);
     fai_destroy(fai);
+
+    //If the output file was not stdout, then try to index it
+    if(argc-optind==3) {
+        if(bam_index_build(argv[optind+2], 0) != 0) {
+            fprintf(stderr, "Couldn't index %s, please manually sort and index it with samtools.\n", argv[optind+2]);
+        }
+    }
     return 0;
 }
 
