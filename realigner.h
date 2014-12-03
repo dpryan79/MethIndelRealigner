@@ -177,7 +177,7 @@ void destroyDFSLL(vertex *v);
 //The output must be destroyed with destroyDFSLL()
 vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
 
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth);
+paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth);
 
 void destroyPaths(paths *p);
 

@@ -1028,6 +1028,7 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt) {
     bf *filter = bf_init(heap->end-heap->start, k);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
+    int32_t extraBreadth = 2*(heap->end-heap->start-1);
     char *CT, *GA, *startVertex;
     paths *CTpaths, *GApaths;
     int len;
@@ -1082,17 +1083,17 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt) {
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, CT+len-k); fflush(stdout);
 #endif
-    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G', maxLen, len-maxDel);
+    CTpaths = getPaths(filter, startVertex, CT+len-k, &CTcycles, 'G', maxLen, len-maxDel, extraBreadth);
     snprintf(startVertex, (k+1)*sizeof(char), "%s", GA);
     if(NOCYCLES) GAcycles = getCycles(filter, startVertex, GA+len-k, k, 'C', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, GA+len-k); fflush(stdout);
 #endif
-    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C', maxLen, len-maxDel);
+    GApaths = getPaths(filter, startVertex, GA+len-k, &GAcycles, 'C', maxLen, len-maxDel, extraBreadth);
     free(startVertex);
 
     //Did we get too many paths?
-    if(MAXBREADTH == 0 || (CTpaths->l <= MAXBREADTH && GApaths->l <= MAXBREADTH)) {
+    if(MAXBREADTH == 0 || (CTpaths->l <= MAXBREADTH+extraBreadth && GApaths->l <= MAXBREADTH+extraBreadth)) {
         //Ensure that the reference path is included (it won't be if it contains a cycle!)
         CTpaths = addRefPath(CT, len, CTpaths);
         GApaths = addRefPath(GA, len, GApaths);
