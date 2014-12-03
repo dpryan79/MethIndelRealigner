@@ -1,9 +1,9 @@
 PREFIX = /home/ryand/bin #This can be changed
 INCLUDE_DIRS = htslib
 CC = gcc
-OPTS = -Wall -g -O2 #-DDEBUG
+OPTS = -Wall -g -O3 #-DDEBUG
 
-OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o
+OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o
 
 .PHONY: all clean htslib install clean-all
 

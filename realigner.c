@@ -1,4 +1,5 @@
 #include "realigner.h"
+#include "threads.h"
 #include "htslib/faidx.h"
 #include <ctype.h>
 
@@ -770,14 +771,19 @@ bam1_t * updateAlignment(bam1_t *b, s_align *al, int32_t readStartPos, int32_t r
 }
 
 //Align all of the paths to a reference sequence
-s_align **alignPaths2Ref(paths *p, int8_t *ref, int32_t refLen, char *refSeq, int32_t *refIndex, int32_t k) {
+s_align **alignPaths2Ref(paths *p, int8_t *ref, int32_t refLen, char *refSeq, int32_t *refIndex, int32_t k, int nt) {
     int32_t i;
     s_align **alignments = malloc(sizeof(s_align*) * p->l);
     assert(alignments);
-    for(i=0; i<p->l; i++) {
-        alignments[i] = SemiGlobalAlignment(ref, refLen, p->conv[i], p->len[i], k);
-        if(*refIndex == -1 && alignments[i]->cigarLen == 1)
-            if(strcmp(refSeq, p->path[i]) == 0) *refIndex = i;
+    if(nt == 1) {
+        for(i=0; i<p->l; i++) {
+            alignments[i] = SemiGlobalAlignment(ref, refLen, p->conv[i], p->len[i], k);
+            if(*refIndex == -1 && alignments[i]->cigarLen == 1)
+                if(strcmp(refSeq, p->path[i]) == 0) *refIndex = i;
+        }
+    } else {
+        setup_SemiGlobalAlignment(alignments, ref, refLen, p, k, refSeq);
+        alignments = signal_SemiGlobalAlignment(refIndex);
     }
     return alignments;
 }
@@ -843,9 +849,9 @@ s_align **alignReads2Paths(bam1_t *b, int strand, int32_t *subreadM, int8_t **su
 }
 
 //This should be made multithreaded);
-void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char *CT, char *GA, int k) {
+void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char *CT, char *GA, int k, int nt) {
     int32_t i, refLen = strlen(CT), refIndex[2] = {-1, -1};
-    int8_t *CTref, *GAref, *subreadSeq;
+    int8_t *CTref, *GAref, *subreadSeq = NULL;
     s_align **CTal, **GAal, ***readal;
     int32_t refLBound, refRBound;
     int32_t subreadM, bestAl;
@@ -857,9 +863,11 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
 
     //subreadSeq and subreadM combine to function similar to a kstring_t
     //we don't need to constantly malloc() space to hold part of a read (subreadSeq)
-    subreadSeq = malloc(50*sizeof(int8_t));
-    assert(subreadSeq);
-    subreadM = 50;
+    if(nt==1) {
+        subreadSeq = malloc(50*sizeof(int8_t));
+        assert(subreadSeq);
+        subreadM = 50;
+    }
 
     readal = malloc((*heap)->l * sizeof(s_align**));
     assert(readal);
@@ -875,19 +883,24 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     for(i=0; i<GApaths->l; i++) GApaths->conv[i] = char2int(GApaths->path[i], GApaths->len[i]);
 
     //Align the paths to the reference sequence
-    CTal = alignPaths2Ref(CTpaths, CTref, refLen, CT, &(refIndex[0]), k);
-    GAal = alignPaths2Ref(GApaths, GAref, refLen, GA, &(refIndex[1]), k);
+    CTal = alignPaths2Ref(CTpaths, CTref, refLen, CT, &(refIndex[0]), k, nt);
+    GAal = alignPaths2Ref(GApaths, GAref, refLen, GA, &(refIndex[1]), k, nt);
 
     //Iterate over the reads, aligning them to the paths
     refLBound = ((*heap)->start-k >= 0) ? (*heap)->start-k : 0;
     refRBound = refLBound + refLen-2*k;
-    for(i=0; i<(*heap)->l; i++) {
-        if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
-        strand = getStrand((*heap)->heap[i]);
+    if(nt==1) {
+        for(i=0; i<(*heap)->l; i++) {
+            if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
+            strand = getStrand((*heap)->heap[i]);
 #ifdef DEBUG
-        fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
+            fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
 #endif
-        readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i, k);
+            readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i, k);
+        }
+    } else {
+        setup_alignReads2Paths(readal, *heap, CTpaths, GApaths, refLBound, refRBound, readLBound, readRBound, k);
+        readal = signal_alignReads2Paths(readLBound, readRBound);
     }
 
     //Count number of best/equally best alignments/path
@@ -978,7 +991,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
     }
     free(CTal);
     free(GAal);
-    free(subreadSeq);
+    if(subreadSeq) free(subreadSeq);
     free(readLBound);
     free(readRBound);
 }
@@ -1012,15 +1025,15 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 }
 
 //k is the kmer
-void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt) {
     bf *filter = bf_init(heap->end-heap->start, k);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
-    kstring_t *ks = calloc(1, sizeof(kstring_t));
     char *CT, *GA, *startVertex;
     paths *CTpaths, *GApaths;
     int len;
     vertex *CTcycles = NULL, *GAcycles = NULL;
     uint64_t h;
+    kstring_t *ks = NULL;
 
     //Add the reference sequence
     start = (heap->start-k >= 0) ? heap->start-k : 0;
@@ -1054,6 +1067,8 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     }
 
     //Process the reads
+    ks = calloc(1, sizeof(kstring_t));
+    assert(ks);
     for(i=0; i<heap->l; i++) {
         if(heap->heap[i]->core.qual < MINMAPQ) continue;
         bam2kmer(heap->heap[i], k, start, end, filter, ks, CT, GA, len, &maxIns, &maxDel);
@@ -1084,7 +1099,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
 
         //Realign the read portions to the paths
         if(CTpaths->l + GApaths->l) {
-            realignHeapCore(&heap, CTpaths, GApaths, CT, GA, k);
+            realignHeapCore(&heap, CTpaths, GApaths, CT, GA, k, nt);
         } else {
             fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", couldn't find any paths post-assembly!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
         }
@@ -1093,7 +1108,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai) {
     }
 
     //Clean up
-    free(ks->s);
+    if(ks->s) free(ks->s);
     free(ks);
     if(CTpaths) destroyPaths(CTpaths);
     if(GApaths) destroyPaths(GApaths);

@@ -2,6 +2,7 @@
 #include "htslib/kseq.h"
 #include "htslib/faidx.h"
 #include "htslib/bgzf.h"
+#include "threads.h"
 #include <zlib.h>
 #include <getopt.h>
 
@@ -62,7 +63,7 @@ struct bounds * overlapsRegion(bam1_t *b) {
     return bounds;
 }
 
-void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai, int depth) {
+void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai, int depth, int nt, int quiet) {
     bam1_t *b = bam_init1();
     struct bounds *bounds;
     alignmentHeap *heap = alignmentHeap_init(depth);
@@ -76,7 +77,9 @@ void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai,
 #ifdef DEBUG
             fprintf(stderr, "[processReads] %s in region\n", bam_get_qname(b)); fflush(stderr);
 #endif
-            fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[bounds->tid], bounds->start, bounds->end); fflush(stderr);
+            if(!quiet) {
+                fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[bounds->tid], bounds->start, bounds->end); fflush(stderr);
+            }
             heap->heap[0] = b;
             heap->start = bounds->start;
             heap->end = bounds->end;
@@ -128,7 +131,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Reached end of alignments\n"); fflush(stderr);
 #endif
-                if(heap->l) realignHeap(heap, k, fai);
+                if(heap->l) realignHeap(heap, k, fai, nt);
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Last heap realigned\n"); fflush(stderr);
 #endif
@@ -141,12 +144,14 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] %s is outside the ROI, realigning the heap\n", bam_get_qname(b)); fflush(stderr);
 #endif
-                realignHeap(heap, k, fai);
+                realignHeap(heap, k, fai, nt);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
             heap = writeHeapUntil(of, hdr, heap, depth);
             if(heap->l) {//The heap wasn't flushed
-                fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
+                if(!quiet) {
+                    fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
+                }
                 goto inheap; //Yeah yeah, I know
             }
 #ifdef DEBUG
@@ -223,11 +228,22 @@ void usage(char *prog) {
 "         is ignored if you supply a BED file. The default is 4, meaning that\n"
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
 "         it.\n"
+"--quiet  Suppress printing the ROI (region of interest) that's being processed.\n"
 "\n"
 "Advanced options:\n"
 "         Unless you're familiar with how graph algorithms work, it's unwise to\n"
 "         change these.\n"
 "\n"
+"--nt INT Number of threads to use for realignment of graph paths to the\n"
+"         reference sequence and reads to the paths. While increasing the\n"
+"         number of threads will speed up processing, due to how things are\n"
+"         implemented there will also be a lot of wasted computer resources (the\n"
+"         threads use spin locks because context switching overhead dwarfs thread\n"
+"         execution time). Particularly on shared systems, this may not be ideal.\n"
+"         Also note that while using --nt 1 will request only a single thread,\n"
+"         using --nt 2 will produce 4 independent processing threads that are\n"
+"         always running (so, a total of 5 concurrent threads, and --nt 3 would\n"
+"         result in 7 threads). The default value is 1.\n"
 "--maxInsert INT The maximum insert size that will be looked for. The default is\n"
 "         0, meaning no limit is used. Setting this to your maximum read length\n"
 "         can be useful in repeat regions where there are many misaligned reads.\n"
@@ -259,8 +275,8 @@ int main(int argc, char *argv[]) {
     bam_hdr_t *hdr;
     gzFile bed;
     faidx_t *fai;
-    int c, bedSet=0, depth = 1000, kmer = 25;
-    int ROIdepth = 4, nCompThreads = 1;
+    int c, bedSet=0, depth = 1000, kmer = 25, quiet = 0;
+    int ROIdepth = 4, nCompThreads = 1, nt = 1;
     uint32_t total = 0;
     MAXBREADTH = 300;
     MAXINSERT = 0;
@@ -272,7 +288,9 @@ int main(int argc, char *argv[]) {
         {"ROIdepth", 1, NULL, 'd'},
         {"breadth",  1, NULL, 1},
         {"maxInsert",  1, NULL, 2},
-        {"noCycles", 0, NULL, 3}
+        {"noCycles", 0, NULL, 3},
+        {"nt",       1, NULL, 4},
+        {"quiet",    0, NULL, 5}
     };
 
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
@@ -320,6 +338,13 @@ int main(int argc, char *argv[]) {
         case 3 :
             NOCYCLES = 1;
             break;
+        case 4 :
+            nt = atoi(optarg);
+            if(nt<1) nt = 1;
+            break;
+        case 5 :
+            quiet = 1;
+            break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
             usage(argv[0]);
@@ -360,15 +385,21 @@ int main(int argc, char *argv[]) {
 
     fai = fai_load(argv[optind+1]);
     GLOBAL_FAI = fai;
-    if(argc-optind==2) of = sam_open("-", "wb"); //stdout
-    else of = sam_open(argv[optind+2], "wb");
+    if(argc-optind==2) {
+        of = sam_open("-", "wb0"); //stdout, uncompressed
+    } else {
+        of = sam_open(argv[optind+2], "wb");
+    }
     if(nCompThreads>1) bgzf_mt(of->fp.bgzf, nCompThreads, 256);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
 
+    //setup the condition variables
+    if(nt>1) setup_threads(nt);
+
     //Process the reads
     lastTargetNode = firstTargetNode->next;
-    processReads(fp, hdr, of, kmer, fai, depth);
+    processReads(fp, hdr, of, kmer, fai, depth, nt, quiet);
 
     //Clean up
     destroyTargetNodes();
@@ -376,6 +407,7 @@ int main(int argc, char *argv[]) {
     sam_close(fp);
     sam_close(of);
     fai_destroy(fai);
+    destroy_threads(nt);
 
     //If the output file was not stdout, then try to index it
     if(argc-optind==3) {
@@ -383,6 +415,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Couldn't index %s, please manually sort and index it with samtools.\n", argv[optind+2]);
         }
     }
+
     return 0;
 }
 
