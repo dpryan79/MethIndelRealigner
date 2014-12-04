@@ -95,7 +95,7 @@ void addDFSVertex(vertex **LL, vertex *toAdd) {
 }
 
 //We'll try a recursive DFS method
-void nextDFSVertex(bf *bf, vertex **stack, vertex *lastVertex, int k, char finalChar, vertex **visited, vertex **cycles, int32_t depth, int32_t maxDepth) {
+void nextDFSVertex(bf **bf, vertex **stack, vertex *lastVertex, int k, char finalChar, vertex **visited, vertex **cycles, int32_t depth, int32_t maxDepth) {
     if(maxDepth && depth > maxDepth) return;
     vertex *v = calloc(1, sizeof(vertex));
     int i;
@@ -108,10 +108,10 @@ void nextDFSVertex(bf *bf, vertex **stack, vertex *lastVertex, int k, char final
     for(i=0; i<4; i++) {
         v->seq[k-1] = finalChars[i];
         v->nchar = i;
-        v->h = hash_seq(v->seq, k) & bf->mask;
+        v->h = hash_seq(v->seq, k) & bf[0]->mask;
         if(cmpVertices(v, lastVertex) == 0) continue;
         //Can this vertex even exist?
-        if(bf_exists(bf, v->h)) {
+        if(bf_exists_bottom(bf, v->h)) {
             //Have we already visited this?
             if(inLL(visited, v)) {
                 //Have we visited this vertex in on this path?
@@ -170,18 +170,18 @@ void destroyDFSLL(vertex *v) {
 //cycles: doubly-linked, ordered by hash
 //stack: doubly-linked FIFO
 //path length
-vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth) {
+vertex * getCycles(bf **bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth) {
     vertex *firstVertex, *targetVertex;
     vertex *visited, *cycles = NULL;
     vertex *fifo;
 
     //Create the first vertex
-    firstVertex = makeVertex(startSeq, k, bf->mask);
+    firstVertex = makeVertex(startSeq, k, bf[0]->mask);
     firstVertex->nchar = -1;
     visited = firstVertex;
-    fifo = makeVertex(startSeq, k, bf->mask);
+    fifo = makeVertex(startSeq, k, bf[0]->mask);
     fifo->nchar = -1;
-    targetVertex = makeVertex(endSeq, k, bf->mask);
+    targetVertex = makeVertex(endSeq, k, bf[0]->mask);
 
     //Traverse
 #ifdef DEBUG
@@ -278,7 +278,7 @@ void appendPath(paths **paths, vertex **stack, int k, char lastChar, int32_t ext
 #endif
 }
 
-void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar, vertex **cycles, paths **paths, int32_t depth, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth) {
+void nextBFSVertex(bf **bf, vertex **stack, vertex *target, int k, char finalChar, vertex **cycles, paths **paths, int32_t depth, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth) {
     if(maxDepth && depth > maxDepth) return;
     vertex *v = calloc(1, sizeof(vertex));
     int i;
@@ -295,7 +295,7 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
         }
         v->seq[k-1] = finalChars[i];
         v->nchar = -1; //This isn't set for target
-        v->h = hash_seq(v->seq, k) & bf->mask;
+        v->h = hash_seq(v->seq, k) & bf[0]->mask;
         if(cmpVertices(v, target) == 0) { //Reached the target
             //Is the path long enough?
             if(depth+1 < minDepth) {
@@ -316,7 +316,7 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
             continue;
         }
         v->nchar = i;
-        if(!bf_exists(bf, v->h)) continue;
+        if(!bf_exists_bottom(bf, v->h)) continue;
 #ifdef DEBUG
         fprintf(stderr, "[nextBFSVertex] %s -> %s\n", (*stack)->seq, v->seq); fflush(stderr);
 #endif
@@ -345,10 +345,10 @@ void nextBFSVertex(bf *bf, vertex **stack, vertex *target, int k, char finalChar
 
 //Return all paths between the start and end vertex in a graph, ignoring cycles
 //Use a breadth-first search
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth) {
+paths * getPaths(bf **bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth) {
     int k = strlen(startSeq);
-    vertex *stack = makeVertex(startSeq, k, bf->mask);
-    vertex *target = makeVertex(endSeq, k, bf->mask);
+    vertex *stack = makeVertex(startSeq, k, bf[0]->mask);
+    vertex *target = makeVertex(endSeq, k, bf[0]->mask);
     paths *paths = initPaths(10);
 
 #ifdef DEBUG

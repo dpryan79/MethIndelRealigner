@@ -175,9 +175,9 @@ void destroyDFSLL(vertex *v);
 
 //bf is the bloom filter, startSeq/endSeq are the sequences of the first/last vertices, k is the k-mer size, finalChar is C or G, if this is a G->a or C->T graph, respectively
 //The output must be destroyed with destroyDFSLL()
-vertex * getCycles(bf *bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
+vertex * getCycles(bf **bf, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
 
-paths * getPaths(bf *bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth);
+paths * getPaths(bf **bf, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth);
 
 void destroyPaths(paths *p);
 
@@ -191,11 +191,14 @@ void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap);
 alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int depth);
 
 //bloomFilter.c
-bf * bf_init(int32_t width, int kmer);
-void bf_destroy(bf *bf);
-void bf_reset(bf *bf);
-inline void bf_add(bf *bf, uint64_t hash);
-inline int bf_exists(bf *bf, uint64_t hash);
+void setMAXLEVELS(int max); //The minimum number of times a Kmer must appear to be included in path finding
+bf ** bf_init(int32_t width, int kmer);
+void bf_destroy(bf **bf);
+void bf_reset(bf **bf);
+inline void bf_add(bf **bf, uint64_t hash);
+inline void bf_add_bottom(bf **bf, uint64_t hash);
+inline int bf_exists(bf **bf, uint64_t hash);
+inline int bf_exists_bottom(bf **bf, uint64_t hash);
 uint64_t hash_seq(char *seq, int len);
 
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt);

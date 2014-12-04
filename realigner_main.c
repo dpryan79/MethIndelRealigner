@@ -244,6 +244,11 @@ void usage(char *prog) {
 "         using --nt 2 will produce 4 independent processing threads that are\n"
 "         always running (so, a total of 5 concurrent threads, and --nt 3 would\n"
 "         result in 7 threads). The default value is 1.\n"
+"--minKmerCount INT The minimum number of times a Kmer must appear for it to be\n"
+"         used in finding paths through the de Bruijn graph. Lower numbers will\n"
+"         produce more (possibly too many, see the --breadth setting) paths,\n"
+"         though a given alignment is more likely to then align perfectly to it.\n"
+"         The default is 4 and this value must be >0.\n"
 "--maxInsert INT The maximum insert size that will be looked for. The default is\n"
 "         0, meaning no limit is used. Setting this to your maximum read length\n"
 "         can be useful in repeat regions where there are many misaligned reads.\n"
@@ -276,7 +281,7 @@ int main(int argc, char *argv[]) {
     gzFile bed;
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 25, quiet = 0;
-    int ROIdepth = 4, nCompThreads = 1, nt = 1;
+    int ROIdepth = 4, nCompThreads = 1, nt = 1, maxLevels;
     uint32_t total = 0;
     MAXBREADTH = 300;
     MAXINSERT = 0;
@@ -284,13 +289,14 @@ int main(int argc, char *argv[]) {
     NOCYCLES = 0;
 
     static struct option lopts[] = {
-        {"help",     0, NULL, 'h'},
-        {"ROIdepth", 1, NULL, 'd'},
-        {"breadth",  1, NULL, 1},
-        {"maxInsert",  1, NULL, 2},
-        {"noCycles", 0, NULL, 3},
-        {"nt",       1, NULL, 4},
-        {"quiet",    0, NULL, 5}
+        {"help",        0, NULL,'h'},
+        {"ROIdepth",    1, NULL,'d'},
+        {"breadth",     1, NULL, 1},
+        {"maxInsert",   1, NULL, 2},
+        {"noCycles",    0, NULL, 3},
+        {"nt",          1, NULL, 4},
+        {"quiet",       0, NULL, 5},
+        {"minKmerCount",1, NULL, 6}
     };
 
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
@@ -344,6 +350,11 @@ int main(int argc, char *argv[]) {
             break;
         case 5 :
             quiet = 1;
+            break;
+        case 6 :
+            maxLevels = atoi(optarg);
+            if(maxLevels<1) maxLevels = 1;
+            setMAXLEVELS(maxLevels);
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);

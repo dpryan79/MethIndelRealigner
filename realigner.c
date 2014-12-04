@@ -111,7 +111,7 @@ int getStrand(bam1_t *b) {
     }
 }
 
-void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *ks, char *CT, char *GA, int32_t refLen, int32_t *maxIns, int32_t *maxDel) {
+void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf **bf, kstring_t *ks, char *CT, char *GA, int32_t refLen, int32_t *maxIns, int32_t *maxDel) {
     int i, start2, end2;
     int offset = (getStrand(b) & 1) ? 0 : 16;
     int32_t *positions = NULL; //Could reuse this like a kstring_t
@@ -204,7 +204,7 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, bf *bf, kstring_t *k
         h = hash_seq(ks->s+i, k);
 #ifdef DEBUG
         snprintf(tmp, k+1, "%s", ks->s+i);
-        fprintf(stderr, "[bam2kmer] vertex %s %" PRIu64"\n", tmp, h & bf->mask);
+        fprintf(stderr, "[bam2kmer] vertex %s %" PRIu64"\n", tmp, h & bf[0]->mask);
 #endif
         bf_add(bf, h);
     }
@@ -1026,7 +1026,7 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 
 //k is the kmer
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt) {
-    bf *filter = bf_init(heap->end-heap->start, k);
+    bf **filter = bf_init(heap->end-heap->start, k);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     int32_t extraBreadth = 2*(heap->end-heap->start-1);
     char *CT, *GA, *startVertex;
@@ -1058,13 +1058,13 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt) {
         fprintf(stderr, "[realignHeap] CTvertex %s\n", tmp); fflush(stderr);
 #endif
         h = hash_seq(CT+i, k);
-        bf_add(filter, h);
+        bf_add_bottom(filter, h);
         h = hash_seq(GA+i, k);
 #ifdef DEBUG
         snprintf(tmp, k+1, "%s", GA+i);
         fprintf(stderr, "[realignHeap] GAvertex %s\n", tmp); fflush(stderr);
 #endif
-        bf_add(filter, h);
+        bf_add_bottom(filter, h);
     }
 
     //Process the reads
