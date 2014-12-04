@@ -20,7 +20,7 @@ To Do
  * The heap doesn't seem to always get sorted
  * Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  * Compare time requirements with BisSNP (in general, this is much faster, even single-threaded)
- * The maximal number of paths should be increased with ROI width. Perhaps 300+2\*(width-1) or something like that would suffice. As is, we skip a lot of the larger ROIs because of having too many paths.
+ * Is the breadth-increasing heuristic reasonable? It might be better to just use a counting bloom filter (perhaps require a count of 4 and ensure that all reference sequence kmers start with that count).
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
  * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
