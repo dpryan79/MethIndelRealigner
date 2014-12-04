@@ -135,7 +135,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Last heap realigned\n"); fflush(stderr);
 #endif
-                writeHeap(of, hdr, heap);
+                writeHeap(of, hdr, heap, 1);
                 heap->l = 0;
                 break;
             } else if(status == 2) {
@@ -147,7 +147,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
                 realignHeap(heap, k, fai, nt);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
-            heap = writeHeapUntil(of, hdr, heap, depth);
+            heap = writeHeapUntil(of, hdr, heap, b, fp);
             if(heap->l) {//The heap wasn't flushed
                 if(!quiet) {
                     fprintf(stderr, "ROI %s:%"PRId32"-%"PRId32"\n", GLOBAL_HEADER->target_name[lastTargetNode->tid], lastTargetNode->start, lastTargetNode->end); fflush(stderr);
@@ -210,7 +210,7 @@ void usage(char *prog) {
 "\nNote that input.bam must be coordinate-sorted and indexed. Similarly,\n"
 "reference.fa must be indexed with samtools faidx. If an output file name isn't\n"
 "given, then the output will be written to stdout (so use '>' to redirect to a\n"
-"file). In this case, no attempt will be made to index the output.\n"
+"file).\n"
 "\nOPTIONS\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
@@ -229,6 +229,8 @@ void usage(char *prog) {
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
 "         it.\n"
 "--quiet  Suppress printing the ROI (region of interest) that's being processed.\n"
+"--index  If the output is being written directly to a file (rather than to the\n"
+"         screen), attempt to index it upon completion.\n"
 "\n"
 "Advanced options:\n"
 "         Unless you're familiar with how graph algorithms work, it's unwise to\n"
@@ -282,6 +284,7 @@ int main(int argc, char *argv[]) {
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 25, quiet = 0;
     int ROIdepth = 4, nCompThreads = 1, nt = 1, maxLevels;
+    int doIndex = 0;
     uint32_t total = 0;
     MAXBREADTH = 300;
     MAXINSERT = 0;
@@ -296,7 +299,8 @@ int main(int argc, char *argv[]) {
         {"noCycles",    0, NULL, 3},
         {"nt",          1, NULL, 4},
         {"quiet",       0, NULL, 5},
-        {"minKmerCount",1, NULL, 6}
+        {"minKmerCount",1, NULL, 6},
+        {"index",       0, NULL, 7}
     };
 
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
@@ -355,6 +359,9 @@ int main(int argc, char *argv[]) {
             maxLevels = atoi(optarg);
             if(maxLevels<1) maxLevels = 1;
             setMAXLEVELS(maxLevels);
+            break;
+        case 7:
+            doIndex = 1;
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -421,14 +428,11 @@ int main(int argc, char *argv[]) {
     destroy_threads(nt);
 
     //If the output file was not stdout, then try to index it
-/*
-    if(argc-optind==3) {
+    if(argc-optind==3 && doIndex) {
         if(bam_index_build(argv[optind+2], 0) != 0) {
             fprintf(stderr, "Couldn't index %s, please manually sort and index it with samtools.\n", argv[optind+2]);
         }
     }
-*/
 
     return 0;
 }
-

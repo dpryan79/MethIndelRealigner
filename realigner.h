@@ -187,8 +187,8 @@ void destroyPaths(paths *p);
 //size is the size of the heap
 alignmentHeap * alignmentHeap_init(int size);
 void alignmentHeap_destroy(alignmentHeap *heap);
-void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap);
-alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int depth);
+void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int doSort);
+alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, bam1_t *curb, samFile *fp);
 
 //bloomFilter.c
 void setMAXLEVELS(int max); //The minimum number of times a Kmer must appear to be included in path finding

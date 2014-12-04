@@ -11,7 +11,7 @@ A set of programs to attempt local methylation-aware realignment around indels. 
  6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
  7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
 
-Note that while efforts are made to keep the output file sorted, you're advised to either attempt to index the results and manually sort them if needed or pipe to samtools sort in order to ensure proper sorting.
+Note that while efforts are made to keep the output file sorted, there are likely edge cases where the output isn't maintained. You can alternatively pipe to `samtools sort`, though this will often degrade performance.
 
 MethIndelRealigner is similar to BisSNP's indel realigner function, but runs in a fraction of the time (specifically, the target creator is >10x faster and the realigner is 2-3x faster). The resulting realignments tend to be similar between the two tools.
 
@@ -23,7 +23,6 @@ To Do
 =====
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
- * A proper sort order won't always be maintained if a realignment results in a start position just past an ROI bounds. It's proving surprisingly difficult to deal with all of the edge cases of this. Because of this, no attempt is currently made to auto-index the output file.
  * Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
  * Add CRAM support.
