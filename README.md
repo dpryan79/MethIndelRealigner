@@ -7,11 +7,11 @@ A set of programs to attempt local methylation-aware realignment around indels. 
  2. Tracking the number of alignments supporting a given InDel and using that to filter possible ROIs (regions of interest) where realignment should be performed.
  3. Looping through the input BAM/CRAM file and finding alignments that overlap an ROI.
  4. The sequence of both the reference and alignments within a 2\*Kmer window centered at the ROI are used to create a de Bruijn graph.
- 5. All a-cyclic paths from 2\*Kmer before the ROI to 2\*Kmer are found and alignments covering the ROI are then aligned to these paths.
+ 5. All paths (possibly without cycles, if --noCycles is used) from 2\*Kmer before the ROI to 2\*Kmer are found and alignments covering the ROI are then aligned to these paths.
  6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
  7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
 
-Note that while efforts are made to keep the output file sorted, you're advised to either manually sort it or pipe to samtools sort in order to ensure proper sorting.
+Note that while efforts are made to keep the output file sorted, you're advised to either attempt to index the results and manually sort them if needed or pipe to samtools sort in order to ensure proper sorting.
 
 MethIndelRealigner is similar to BisSNP's indel realigner function, but runs in a fraction of the time (specifically, the target creator is >10x faster and the realigner is 2-3x faster). The resulting realignments tend to be similar between the two tools.
 
@@ -21,11 +21,9 @@ Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C imp
 
 To Do
 =====
- * A proper sort order won't be maintained if a realignment results in a start position just past an ROI bounds. It's proving surprisingly difficult to completely guarantee that this doesn't happen. Because of this, no attempt is currently made to auto-index the output file.
- * Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  * Ensure validity of results on a non-trivial example!!!
  * Add examples and actual documentation to the README.md
+ * A proper sort order won't always be maintained if a realignment results in a start position just past an ROI bounds. It's proving surprisingly difficult to deal with all of the edge cases of this. Because of this, no attempt is currently made to auto-index the output file.
+ * Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
- * Add a license (probably MIT-style)
  * Add CRAM support.
- * Determine an optimal k-mer size that generally finds the fewest paths traversing an ROI while cycles are allowed. This can then become the default.
