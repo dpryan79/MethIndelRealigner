@@ -372,7 +372,7 @@ int main(int argc, char *argv[]) {
     } else {
         //Run TargetCreator ourselves
         initTargetNodes();
-        findInDels(fp, hdr, MINMAPQ, kmer);
+        findInDels(fp, hdr, MINMAPQ, 5);
         total = depthFilter(ROIdepth);
         fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1);
         fflush(stderr);

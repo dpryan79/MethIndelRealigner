@@ -4,10 +4,11 @@
 void usage(char *prog) {
     fprintf(stderr, "%s [OPTIONS] file.bam output.bed\n", prog);
     fprintf(stderr,
+"\nNote that regions of interest (ROIs) within 5 bases of each other will be\n"
+"merged, since they likely arise from the same event.\n"
 "\nOPTIONS:\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
-"-k INT   The k-mer size to use. This must be an odd number. The default is 17.\n"
 "--ROIdepth INT Minimum depth covering a putative ROI to include it. This option\n"
 "         is ignored if you supply a BED file. The default is 4, meaning that\n"
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
@@ -19,24 +20,18 @@ int main(int argc, char *argv[]) {
     bam_hdr_t *hdr;
     uint32_t total = 0;
     FILE *of;
-    int ROIdepth = 4, kmer = 17, c;
+    int ROIdepth = 4, kmer = 5, c;
     MINMAPQ = 10;
 
     static struct option lopts[] = {
         {"help",     0, NULL, 'h'},
         {"ROIdepth", 1, NULL, 'd'}};
 
-    while((c = getopt_long(argc, argv, "k:q:h", lopts, NULL)) >= 0) {
+    while((c = getopt_long(argc, argv, "q:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
             usage(argv[0]);
             return 0;
-            break;
-        case 'k' :
-            kmer = atoi(optarg);
-            if(!(kmer&1)) {
-                fprintf(stderr, "-k must be an odd number, changing to %i\n", ++kmer);
-            }
             break;
         case 'd' :
             ROIdepth = atoi(optarg);
@@ -66,7 +61,7 @@ int main(int argc, char *argv[]) {
     hdr = sam_hdr_read(fp);
     initTargetNodes();
     //Iterate
-    findInDels(fp, hdr, MINMAPQ, kmer);
+    findInDels(fp, hdr, MINMAPQ, 5);
     //Filter
     total = depthFilter(ROIdepth);
     //Write output
