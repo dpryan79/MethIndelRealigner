@@ -2,10 +2,11 @@
 #include <getopt.h>
 
 void usage(char *prog) {
-    fprintf(stderr, "%s [OPTIONS] file.bam output.bed\n", prog);
+    fprintf(stderr, "%s [OPTIONS] file.bam [output.bed]\n", prog);
     fprintf(stderr,
 "\nNote that regions of interest (ROIs) within 5 bases of each other will be\n"
 "merged, since they likely arise from the same event.\n"
+"\nIf output.bed isn't specified, it'll be printed to stdout (the screen)\n"
 "\nOPTIONS:\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
@@ -16,11 +17,11 @@ void usage(char *prog) {
 }
 
 int main(int argc, char *argv[]) {
-    htsFile *fp;
+    htsFile *fp = NULL;
     bam_hdr_t *hdr;
     uint32_t total = 0;
-    FILE *of;
-    int ROIdepth = 4, kmer = 5, c;
+    FILE *of = NULL;
+    int ROIdepth = 4, c;
     MINMAPQ = 10;
 
     static struct option lopts[] = {
@@ -50,15 +51,22 @@ int main(int argc, char *argv[]) {
         usage(argv[0]);
         return 0;
     }
-    if(argc-optind != 2) {
+    if(argc-optind != 2 || argc-optind != 1) {
         usage(argv[0]);
         return 1;
     }
 
     //Open
     fp = sam_open(argv[optind], "rb");
-    of = fopen(argv[optind+1], "w");
+    if(!fp) return 1;
+    if(argc-optind == 2) {
+        of = fopen(argv[optind+1], "w");
+        if(!of) return 1;
+    } else {
+        of = stdout;
+    }
     hdr = sam_hdr_read(fp);
+    if(!hdr) return 1;
     initTargetNodes();
     //Iterate
     findInDels(fp, hdr, MINMAPQ, 5);
@@ -70,7 +78,7 @@ int main(int argc, char *argv[]) {
     destroyTargetNodes();
     bam_hdr_destroy(hdr);
     sam_close(fp);
-    fclose(of);
+    if(argc-optind == 2) fclose(of);
 
     fprintf(stderr, "Found %" PRIu32 " sights.\n", total);
     return 0;
