@@ -88,7 +88,6 @@ s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pat
 //Perform semi-global alignment using a Needleman-Wunsch like algorithm. Since the first and last k of the 
 //path and reference are known to be identical, this can ensure complete overlap. In the future, the
 //mismatch, gap open, and gap extend penalties could be user specified.
-//This could be made slightly faster by removing the topmost and leftmost k rows/columns, making the matrix (n-2k+1)*(m-2k+1)
 s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k) {
     int64_t i, j, *last, *cur, *tmp;
     int8_t **mat;
@@ -120,27 +119,27 @@ s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t
 
 skip:
     //Initialize the matrix and counts
-    mat = malloc((pathLen+2-k)*sizeof(int8_t*));
+    mat = malloc((pathLen+3-2*k)*sizeof(int8_t*));
     assert(mat);
-    for(i=0; i<pathLen+2-k; i++) {
-        mat[i] = calloc(refLen+2-k, sizeof(int8_t));
+    for(i=0; i<pathLen+3-2*k; i++) {
+        mat[i] = calloc(refLen+3-2*k, sizeof(int8_t));
         assert(mat[i]);
     }
-    for(j=1; j<refLen+2-k; j++) mat[0][j] = 4;
+    for(j=1; j<refLen+3-2*k; j++) mat[0][j] = 4;
     last = malloc(sizeof(int64_t) * (refLen+2-k));
     cur = malloc(sizeof(int64_t) * (refLen+2-k));
     assert(last); assert(cur);
     last[0] = 0;
-    for(j=1; j<refLen+2-k; j++) last[j] = gapExtend*j + gapOpen;
+    for(j=1; j<refLen+3-2*k; j++) last[j] = gapExtend*j + gapOpen;
 
     //Fill in the direction matrix
-    for(i=1; i<pathLen+2-k; i++) {
+    for(i=1; i<pathLen+3-2*k; i++) {
         mat[i][0] = 1;
         cur[0] = gapExtend*i + gapOpen;
-        for(j=1; j<refLen+2-k; j++) {
+        for(j=1; j<refLen+3-2*k; j++) {
             left = cur[j-1] + gapExtend + ((mat[i][j-1] & 4)?0:gapOpen);
             top = last[j] + gapExtend + ((mat[i-1][j] & 1)?0:gapOpen);
-            diag = last[j-1] + scoreMatrix[path[i-1]][ref[j-1]];
+            diag = last[j-1] + scoreMatrix[path[i-2+k]][ref[j-2+k]]; //was i-1+k, j-1+k
             best = left;
             if(best < top) best = top;
             if(best < diag) best = diag;
@@ -157,10 +156,10 @@ skip:
     //Trace-back
     cigar = malloc(sizeof(uint32_t) * maxCigar);
     assert(cigar);
-    i = pathLen-k+1;
-    j = refLen-k+1;
+    i = pathLen-2*k+2;
+    j = refLen-2*k+2;
     oplen=k-1;
-    while(i>k && j>k) {
+    while(i>0 && j>0) {
         //Try to perform the last CIGAR op again
         if(op == 0) { //M, diag
             if(mat[i][j] & 2) {
@@ -198,30 +197,30 @@ skip:
     }
 
     //Finish up
-    if(i==k && j==k) {
+    if(i==0 && j==0) {
         if(op != 0) {
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen-1);
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 0, k);
         } else {
-            oplen += k;
+            oplen += k-1; //was k
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen);
         }
-    } else if(i==k) { //Still have a deletion
+    } else if(i==0) { //Still have a deletion
         if(op != 2) {
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen);
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 2, j-k);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen-1);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 2, j); //or j-1?
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 0, k);
         } else {
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen+j-k);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen+j); //or oplen+j-1?
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 0, k);
         }
     } else { //Still have an insertion
         if(op != 1) {
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen);
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 1, i-k);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen-1);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 1, i); //or i-1?
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 0, k);
         } else {
-            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen+i-k);
+            pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, op, oplen+i); //or oplen+i-1?
             pushSGCIGAR(&cigar, sal->cigarLen++, &maxCigar, 0, k);
         }
     }
@@ -236,7 +235,7 @@ skip:
     }
     sal->cigar = cigar;
 #ifdef DEBUG
-//    printMatrix(mat, pathLen+2-k, refLen+2-k);
+//    printMatrix(mat, pathLen+3-2*k, refLen+3-2*k);
     fprintf(stderr, "[SemiGlobalAlignment] ref ");
     for(i=0; i<refLen; i++) fprintf(stderr, "%"PRId8, ref[i]);
     fprintf(stderr, "\n");
@@ -262,7 +261,7 @@ skip:
     assert(l==refLen);
 #endif
 
-    for(i=0; i<pathLen+2-k; i++) free(mat[i]);
+    for(i=0; i<pathLen+3-2*k; i++) free(mat[i]);
     free(mat);
     free(cur);
     free(last);
