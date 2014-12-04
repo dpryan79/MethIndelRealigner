@@ -421,11 +421,13 @@ int main(int argc, char *argv[]) {
     destroy_threads(nt);
 
     //If the output file was not stdout, then try to index it
+/*
     if(argc-optind==3) {
         if(bam_index_build(argv[optind+2], 0) != 0) {
             fprintf(stderr, "Couldn't index %s, please manually sort and index it with samtools.\n", argv[optind+2]);
         }
     }
+*/
 
     return 0;
 }
