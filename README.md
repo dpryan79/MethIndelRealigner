@@ -3,20 +3,22 @@ Note: This isn't even beta quality yet. I don't recommend using it for anything 
 MethIndelRealigner
 ==================
 A set of programs to attempt local methylation-aware realignment around indels. This would be most useful in cases where one is performing some type of BS-seq on a human and wants to decrease incorrect methylation calls due to indel-induced misalignments. These programs work by:
- 1. Finding InDels in alignments and marking their extent. A MAPQ threshold can be applied to alignments before considering whether they support the existence of an InDel.
+1. Finding InDels in alignments and marking their extent. A MAPQ threshold can be applied to alignments before considering whether they support the existence of an InDel.
 
-![An example ROI due to an insertion](https://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/InDelExample.annotated.png)
-**Figure 1** Above is an example of an ROI (region of interest), where there's an insertion of CGCG versus the reference sequence. Note that some alignments are soft-clipped due to partially or totally overlapping the insertion. Since the insertion and the sequence immediately following it are the same, some reads are able to align to the reference without soft-clipping, though their 3'-most alignments are likely incorrect (they're more likely to map to the insertion).
+  ![An example ROI due to an insertion](https://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/InDelExample.annotated.png)
 
- 2. Tracking the number of alignments supporting a given InDel and using that to filter possible ROIs (regions of interest) where realignment should be performed.
- 3. Looping through the input BAM/CRAM file and finding alignments that overlap an ROI.
- 4. The sequence of both the reference and alignments within a 2\*Kmer window centered at the ROI (see for example [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/BigWindowForKmerExample.annotated.png), with K=21) are used to create a de Bruijn graph. A graph of the ROI shown above is available in [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/graph.pdf). The graph starts at the top and proceed through the bottom. Note that there are 6 possible paths through this graph. Blue arrows simply denote paths encountered before during depth first search.
- 5. All paths (possibly without cycles, if --noCycles is used) from 2\*Kmer before the ROI to 2\*Kmer are found and alignments covering the ROI are then aligned to these paths.
- 6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
- 7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
+  **Figure 1** Above is an example of an ROI (region of interest), where there's an insertion of CGCG versus the reference sequence. Note that some alignments are soft-clipped due to partially or totally overlapping the insertion. Since the insertion and the sequence immediately following it are the same, some reads are able to align to the reference without soft-clipping, though their 3'-most alignments are likely incorrect (they're more likely to map to the insertion).
 
-![Post-realignment](https://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/RealignedExample.png)
-**Figure 2** Realigned results are more probable than those prior to alignments. Note that now there are no soft-clipped bases and all of the alignments that can align to the insertion do so.
+2. Tracking the number of alignments supporting a given InDel and using that to filter possible ROIs (regions of interest) where realignment should be performed.
+3. Looping through the input BAM/CRAM file and finding alignments that overlap an ROI.
+4. The sequence of both the reference and alignments within a 2\*Kmer window centered at the ROI (see for example [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/BigWindowForKmerExample.annotated.png), with K=21) are used to create a de Bruijn graph. A graph of the ROI shown above is available in [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/graph.pdf). The graph starts at the top and proceed through the bottom. Note that there are 6 possible paths through this graph. Blue arrows simply denote paths encountered before during depth first search.
+5. All paths (possibly without cycles, if --noCycles is used) from 2\*Kmer before the ROI to 2\*Kmer are found and alignments covering the ROI are then aligned to these paths.
+6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
+7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
+
+  ![Post-realignment](https://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/RealignedExample.png)
+
+  **Figure 2** Realigned results are more probable than those prior to alignments. Note that now there are no soft-clipped bases and all of the alignments that can align to the insertion do so.
 
 Note that while efforts are made to keep the output file sorted, there are likely edge cases where the output isn't maintained. You can alternatively pipe to `samtools sort`, though this will often degrade performance.
 
