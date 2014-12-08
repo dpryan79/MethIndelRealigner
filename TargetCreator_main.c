@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
         usage(argv[0]);
         return 0;
     }
-    if(argc-optind != 2 || argc-optind != 1) {
+    if(argc-optind != 2 && argc-optind != 1) {
         usage(argv[0]);
         return 1;
     }

@@ -28,6 +28,58 @@ Paths are aligned to the reference sequence using a global alignment (Needleman-
 
 Note that murmur3.c and murmur3.h are C implementations of MurmurHash. The C implementation is from [Peter Scott](https://github.com/PeterScott/murmur3) and MurmurHash itself is by [Austin Appleby](https://code.google.com/p/smhasher/wiki/MurmurHash3). Both of these are in the public domain.
 
+Installation
+============
+MethIndelRealigner is relatively easy to download and install. The steps are as follows:
+ 1. git clone https://github.com/dpryan79/MethIndelRealigner.git
+ 2. cd MethIndelRealigner
+ 3. make
+ 4. make install prefix=/path/to/desired/installation/location
+
+There are two installed files. They're currently named TargetCreator and Realigner, though these names are likely to change.
+
+Usage
+=====
+You can find a simple example dataset under the "example" directory. The following commands illustrate a typical workflow:
+
+ 1. TargetCreator example.sorted.bam > example.bed
+ 2. Realigner -l example.bed -@ 4 example.sorted.bam example.fa output.bam
+ 3. samtools index output.bam
+
+The resulting output.bam file can be directly used for methylation extraction (e.g., by [PileOMeth](https://github.com/dpryan79/PileOMeth)). You can also request that `Realigner` index the BAM file by specifying the `--index` option. Note that the `-@` option is overkill for the example, but very useful for real datasets (the slowest part of creating the output file is compression).
+
+Note that in a real dataset, you're likely to see warnings like the following:
+
+> [processReads] Skipping 1:631775-631782, too many reads
+> [realignHeap] Skipping 1:1554209-1554342, too many paths!
+
+The first line indicates that a given region has too many alignments to be processed. This can be altered with the -D option. The default maximum number of alignments a region can have is 1000. In general, it is inadvisable to change this. The reason is that a region with 1000x or more coverage is likely to be dominated by PCR duplicates...creating likely false methylation metrics there. The second warning message indicates that a particular region has too many possible haplotypes. This typically occurs in regions of very low complexity when many of the alignments are of low quality. Again, these regions should likely be ignored during later methylation extraction.
+
+Comparison with BisSNP
+======================
+MethIndelRealigner is generally much faster than BisSNP. As a test, [bison](https://github.com/dpryan79/bison) was used to align a publically available human RRBS dataset ([SRR1182519](http://www.ebi.ac.uk/ena/data/view/SRR1182519)). The resulting BAM files were sorted and read groups added (N.B., MethIndelRealigner does not need these, but BisSNP does). This file was used for target creation with the following commands:
+
+ 1. java -Xmx10g -jar BisSNP-0.82.2.jar -T BisulfiteRealignerTargetCreator -R GRCh38.fa -o SRR1182519.intervals -nt 6 -I SRR1182519.rg.bam
+ 2. java -Xmx10g -jar BisSNP-0.82.2.jar -T BisulfiteIndelRealigner -R GRCh38.fa -I SRR1182519.rg.bam -targetIntervals SRR1182519.intervals -o SRR1182519.BisSNP.bam
+ 3. TargetCreator -q 1 SRR1182519.bam > SRR1182519.bed
+ 4. Realigner -q 1 -l SRR1182519.bed -@ 4 --quiet SRR1182519.rg.bam GRCh38.fa SRR1182519.realigned.bam
+
+For comparison purposes, `samtools view -u SRR1182519.rg.bam | samtools view -@ 4 -bo test.bam -` was used to gauge the time taken to simply decompress/compress the BAM file and parse it. The time taken was as follows:
+
+| Command                                | Time required                             |
+|----------------------------------------|:------------------------------------------|
+| BisSNP BisulfiteRealignerTargetCreator | 29 minutes 16 seconds                     |
+| TargetCreator                          | 1 minute 30 seconds                       |
+| BisSNP BisulfiteIndelRealigner         | 31 minutes 35 seconds                     |
+| Realigner                              | 7 minutes 1 second                        |
+| samtools                               | 7 minutes                                 |
+
+N.B., BisSNP's target creator would require ~6x more time if run single threaded.
+
+Keep in mind that the tested version of BisSNP seems to ignore the `--maxReads option`, so its default was used by `TargetCreator`.
+
+Note that like BisSNP, `Realigner` adds OC and OP auxiliary tags to realigned alignments. BisSNP realigned 147,746 and Realigner realigned 226,478 alignments in this dataset. The two tools disagreed on a number of realignments. Realigner did not realign ~63,000 alignments realigned by BisSNP, while BisSNP did not realign ~125,000 alignments realigned by `Realigner`. These ~125,000 differences are due to differences in how paths are aligned back to the reference sequence.
+
 To Do
 =====
  * Ensure validity of results on a non-trivial example!!!
