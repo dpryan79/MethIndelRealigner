@@ -36,7 +36,7 @@ MethIndelRealigner is relatively easy to download and install. The steps are as 
  3. make
  4. make install prefix=/path/to/desired/installation/location
 
-There are two installed files. They're currently named TargetCreator and Realigner, though these names are likely to change.
+There are two installed files. They're currently named `TargetCreator` and `Realigner`, though these names are likely to change.
 
 Usage
 =====
@@ -51,9 +51,10 @@ The resulting output.bam file can be directly used for methylation extraction (e
 Note that in a real dataset, you're likely to see warnings like the following:
 
 > [processReads] Skipping 1:631775-631782, too many reads
+
 > [realignHeap] Skipping 1:1554209-1554342, too many paths!
 
-The first line indicates that a given region has too many alignments to be processed. This can be altered with the -D option. The default maximum number of alignments a region can have is 1000. In general, it is inadvisable to change this. The reason is that a region with 1000x or more coverage is likely to be dominated by PCR duplicates...creating likely false methylation metrics there. The second warning message indicates that a particular region has too many possible haplotypes. This typically occurs in regions of very low complexity when many of the alignments are of low quality. Again, these regions should likely be ignored during later methylation extraction.
+The first line indicates that a given region has too many alignments to be processed. This can be altered with the `-D` option. The default maximum number of alignments a region can have is 1000. In general, it is inadvisable to change this. The reason is that a region with 1000x or more coverage is likely to be dominated by PCR duplicates...creating likely false methylation metrics there. The second warning message indicates that a particular region has too many possible haplotypes. This typically occurs in regions of very low complexity when many of the alignments are of low quality. Again, these regions should likely be ignored during later methylation extraction.
 
 Comparison with BisSNP
 ======================
