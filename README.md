@@ -77,7 +77,7 @@ For comparison purposes, `samtools view -u SRR1182519.rg.bam | samtools view -@ 
 
 N.B., BisSNP's target creator would require ~6x more time if run single threaded.
 
-Keep in mind that the tested version of BisSNP seems to ignore the `--maxReads option`, so its default was used by `TargetCreator`.
+Keep in mind that the tested version of BisSNP seems to ignore the `--maxReads` option, so its default was used by `TargetCreator`.
 
 Note that like BisSNP, `Realigner` adds OC and OP auxiliary tags to realigned alignments. BisSNP realigned 147,746 and Realigner realigned 226,478 alignments in this dataset. The two tools disagreed on a number of realignments. Realigner did not realign ~63,000 alignments realigned by BisSNP, while BisSNP did not realign ~125,000 alignments realigned by `Realigner`. These ~125,000 differences are due to differences in how paths are aligned back to the reference sequence.
 
