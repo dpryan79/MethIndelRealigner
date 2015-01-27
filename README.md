@@ -83,6 +83,7 @@ Note that like BisSNP, `Realigner` adds OC and OP auxiliary tags to realigned al
 
 To Do
 =====
- * Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
- * During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
- * Add CRAM support.
+ - [ ] Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
+ - [ ] During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
+ - [ ] Add CRAM support.
+ - [ ] Put everything behind a single executable.
