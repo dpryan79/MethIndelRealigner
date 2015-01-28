@@ -3,3 +3,4 @@
 Realigner
 TargetCreator
 example/bisulfite_genome
+htslib/*

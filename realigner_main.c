@@ -205,12 +205,14 @@ int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
 }
 
 void usage(char *prog) {
-    fprintf(stderr, "Usage: %s [OPTIONS] input.bam reference.fa [output.bam]\n", prog);
+    fprintf(stderr, "Usage: %s [OPTIONS] <input.bam> <reference.fa> [output.bam]\n", prog);
     fprintf(stderr, 
 "\nNote that input.bam must be coordinate-sorted and indexed. Similarly,\n"
 "reference.fa must be indexed with samtools faidx. If an output file name isn't\n"
 "given, then the output will be written to stdout (so use '>' to redirect to a\n"
 "file).\n"
+"\nThe input and output formats will always be the same. So BAM input produces\n"
+"BAM output and CRAM input produces CRAM output.\n"
 "\nOPTIONS\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
@@ -380,7 +382,8 @@ int main(int argc, char *argv[]) {
     }
 
     //Open the input files
-    fp = sam_open(argv[optind], "rb");
+    fp = sam_open(argv[optind], "r");
+    hts_set_fai_filename(fp, argv[optind+1]);
     hdr = sam_hdr_read(fp);
     initTargetNodes();
 
@@ -398,17 +401,21 @@ int main(int argc, char *argv[]) {
         sam_close(fp);
         //Reopen the input BAM file
         fp = sam_open(argv[optind], "rb");
+        hts_set_fai_filename(fp, argv[optind+1]);
         hdr = sam_hdr_read(fp);
     }
 
     fai = fai_load(argv[optind+1]);
     GLOBAL_FAI = fai;
     if(argc-optind==2) {
-        of = sam_open("-", "wb0"); //stdout, uncompressed
+        //write to stdout
+        if(fp->is_cram) of = sam_open("-", "wc");
+        else of = sam_open("-", "wb0");
     } else {
-        of = sam_open(argv[optind+2], "wb");
+        if(fp->is_cram) of = sam_open(argv[optind+2], "wc");
+        else of = sam_open(argv[optind+2], "wb");
     }
-    if(nCompThreads>1) bgzf_mt(of->fp.bgzf, nCompThreads, 256);
+    if(nCompThreads>1) hts_set_threads(of, nCompThreads);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
 

@@ -2,12 +2,14 @@
 #include <getopt.h>
 
 void usage(char *prog) {
-    fprintf(stderr, "%s [OPTIONS] file.bam [output.bed]\n", prog);
+    fprintf(stderr, "%s [OPTIONS] <file.bam> [output.bed]\n", prog);
     fprintf(stderr,
 "\nNote that regions of interest (ROIs) within 5 bases of each other will be\n"
 "merged, since they likely arise from the same event.\n"
 "\nIf output.bed isn't specified, it'll be printed to stdout (the screen)\n"
 "\nOPTIONS:\n"
+"-f FILE  If the input is in CRAM format, specify where the reference sequence\n"
+"         fasta file is located.\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
 "--ROIdepth INT Minimum depth covering a putative ROI to include it. This option\n"
@@ -19,6 +21,7 @@ void usage(char *prog) {
 int main(int argc, char *argv[]) {
     htsFile *fp = NULL;
     bam_hdr_t *hdr;
+    char *ref = NULL;
     uint32_t total = 0;
     FILE *of = NULL;
     int ROIdepth = 4, c;
@@ -28,7 +31,7 @@ int main(int argc, char *argv[]) {
         {"help",     0, NULL, 'h'},
         {"ROIdepth", 1, NULL, 'd'}};
 
-    while((c = getopt_long(argc, argv, "q:h", lopts, NULL)) >= 0) {
+    while((c = getopt_long(argc, argv, "q:f:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
             usage(argv[0]);
@@ -39,6 +42,9 @@ int main(int argc, char *argv[]) {
             break;
         case 'q' :
             MINMAPQ = atoi(optarg);
+            break;
+        case 'f' :
+            ref = optarg;
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -59,6 +65,7 @@ int main(int argc, char *argv[]) {
     //Open
     fp = sam_open(argv[optind], "rb");
     if(!fp) return 1;
+    if(ref) hts_set_fai_filename(fp, ref);
     if(argc-optind == 2) {
         of = fopen(argv[optind+1], "w");
         if(!of) return 1;
