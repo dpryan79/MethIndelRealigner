@@ -35,7 +35,7 @@ MethIndelRealigner is relatively easy to download and install. The steps are as 
     git submodule init
     git submodule update
     make
-    make install prefix=/path/to/desired/installation/location
+    make install PREFIX=/path/to/desired/installation/location
 
 Usage
 =====
