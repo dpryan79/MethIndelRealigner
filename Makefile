@@ -11,8 +11,7 @@ ifneq "$(wildcard .git)" ""
 VERSION := $(VERSION)-$(shell git describe --always --dirty)
 endif
 
-
-.PHONY: all clean htslib install clean-all
+.PHONY: all clean htslib install clean-all version.h
 
 .SUFFIXES:.c .o
 
