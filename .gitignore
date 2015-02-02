@@ -1,6 +1,6 @@
 *.o
 *.sam
-Realigner
-TargetCreator
+MethIndelRealigner
 example/bisulfite_genome
 htslib/*
+version.h

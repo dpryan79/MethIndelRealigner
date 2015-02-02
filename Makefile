@@ -1,33 +1,40 @@
 PREFIX = /home/ryand/bin #This can be changed
 INCLUDE_DIRS = htslib
 CC = gcc
-OPTS = -Wall -g -O3 #-DDEBUG
+OPTS = -Wall -g -O3
 
-OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o
+OBJS = alignmentHeap.o bloomFilter.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o TargetCreator_main.o realigner_main.o
+VERSION = 0.1.0
+
+#If we're building from a git repo, then append the most recent tag
+ifneq "$(wildcard .git)" ""
+VERSION := $(VERSION)-$(shell git describe --always --dirty)
+endif
+
 
 .PHONY: all clean htslib install clean-all
 
 .SUFFIXES:.c .o
 
-all: TargetCreator Realigner
+all: MethIndelRealigner
 
 .c.o:
 	$(CC) -c $(OPTS) -I$(INCLUDE_DIRS) $< -o $@
 
+version.h:
+	echo '#define VERSION "$(VERSION)"' > $@
+
 htslib: 
 	$(MAKE) -C htslib
 
-TargetCreator: htslib TargetCreator.o
-	$(CC) $(OPTS) -I$(INCLUDE_DIRS) -o TargetCreator TargetCreator.o htslib/libhts.a TargetCreator_main.c -lz -lpthread
-
-Realigner: $(OBJS) htslib
-	$(CC) $(OPTS) -I$(INCLUDE_DIRS) $(OBJS) htslib/libhts.a realigner_main.c -o Realigner -lz -lpthread -lm
+MethIndelRealigner: htslib version.h $(OBJS)
+	$(CC) $(OPTS) -I$(INCLUDE_DIRS) $(OBJS) htslib/libhts.a main.c -o MethIndelRealigner -lz -lpthread -lm
 
 clean:
-	rm -f *.o TargetCreator Realigner
+	rm -f *.o MethIndelRealigner
 
 clean-all: clean
 	make --directory=htslib clean
 
 install: TargetCreator Realigner
-	install TargetCreator Realigner $(PREFIX)
+	install MethIndelRealigner $(PREFIX)

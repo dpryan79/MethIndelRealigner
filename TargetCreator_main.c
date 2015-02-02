@@ -1,8 +1,8 @@
 #include "realigner.h"
 #include <getopt.h>
 
-void usage(char *prog) {
-    fprintf(stderr, "%s [OPTIONS] <file.bam> [output.bed]\n", prog);
+void TargetCreator_usage() {
+    fprintf(stderr, "MethIndelRealigner TargetCreator [OPTIONS] <file.bam> [output.bed]\n");
     fprintf(stderr,
 "\nNote that regions of interest (ROIs) within 5 bases of each other will be\n"
 "merged, since they likely arise from the same event.\n"
@@ -18,7 +18,7 @@ void usage(char *prog) {
 "         it.\n");
 }
 
-int main(int argc, char *argv[]) {
+int TargetCreator_main(int argc, char *argv[]) {
     htsFile *fp = NULL;
     bam_hdr_t *hdr;
     char *ref = NULL;
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     while((c = getopt_long(argc, argv, "q:f:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
-            usage(argv[0]);
+            TargetCreator_usage();
             return 0;
             break;
         case 'd' :
@@ -48,17 +48,17 @@ int main(int argc, char *argv[]) {
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
-            usage(argv[0]);
+            TargetCreator_usage();
             return 1;
         }
     }
 
     if(argc == 1) {
-        usage(argv[0]);
+        TargetCreator_usage();
         return 0;
     }
     if(argc-optind != 2 && argc-optind != 1) {
-        usage(argv[0]);
+        TargetCreator_usage();
         return 1;
     }
 

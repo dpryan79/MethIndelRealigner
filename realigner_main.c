@@ -204,8 +204,8 @@ int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
     return 0;
 }
 
-void usage(char *prog) {
-    fprintf(stderr, "Usage: %s [OPTIONS] <input.bam> <reference.fa> [output.bam]\n", prog);
+void realigner_usage() {
+    fprintf(stderr, "Usage: MethIndelRealigner realign [OPTIONS] <input.bam> <reference.fa> [output.bam]\n");
     fprintf(stderr, 
 "\nNote that input.bam must be coordinate-sorted and indexed. Similarly,\n"
 "reference.fa must be indexed with samtools faidx. If an output file name isn't\n"
@@ -278,8 +278,7 @@ void usage(char *prog) {
 "         when creating paths in any case.\n");
 }
 
-//This should be exanded upon to attempt to index the fasta and BAM files if needed
-int main(int argc, char *argv[]) {
+int realigner_main(int argc, char *argv[]) {
     htsFile *fp, *of;
     bam_hdr_t *hdr;
     gzFile bed;
@@ -308,7 +307,7 @@ int main(int argc, char *argv[]) {
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
-            usage(argv[0]);
+            realigner_usage();
             return 0;
             break;
         case 'k' :
@@ -367,17 +366,17 @@ int main(int argc, char *argv[]) {
             break;
         default :
             fprintf(stderr, "Invalid option '%c'\n", c);
-            usage(argv[0]);
+            realigner_usage();
             return 1;
         }
     }
 
     if(argc == 1) {
-        usage(argv[0]);
+        realigner_usage();
         return 0;
     }
     if(argc-optind != 3 && argc-optind != 2) {
-        usage(argv[0]);
+        realigner_usage();
         return 1;
     }
 
