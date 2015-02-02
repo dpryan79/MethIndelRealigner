@@ -1,5 +1,3 @@
-Note: This isn't even beta quality yet. I don't recommend using it for anything serious at the moment!
-
 MethIndelRealigner
 ==================
 A set of programs to attempt local methylation-aware realignment around indels. This would be most useful in cases where one is performing some type of BS-seq on a human and wants to decrease incorrect methylation calls due to indel-induced misalignments. These programs work by:
