@@ -66,7 +66,7 @@ loop:
     for(i=thread_id; i<GLOBAL_heap->l; i+=GLOBAL_nt) {
         if(GLOBAL_heap->heap[i]->core.qual < MINMAPQ) continue;
         strand = getStrand(GLOBAL_heap->heap[i]);
-        GLOBAL_salign[i] = alignReads2Paths(GLOBAL_heap->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? GLOBAL_CTpaths : GLOBAL_GApaths, GLOBAL_refLBound, GLOBAL_refRBound, GLOBAL_readLBound+i, GLOBAL_readRBound+i, GLOBAL_k);
+        GLOBAL_salign[i] = alignReads2Paths(GLOBAL_heap->heap[i], strand, &subreadM, &subreadSeq, (strand&1) ? GLOBAL_CTpaths : GLOBAL_GApaths, GLOBAL_refLBound, GLOBAL_refRBound, GLOBAL_readLBound+i, GLOBAL_readRBound+i, GLOBAL_k);
     }
 
     //Lock and update

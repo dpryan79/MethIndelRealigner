@@ -896,7 +896,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
 #ifdef DEBUG
             fprintf(stderr, "[realignHeapCore] processing heap->heap[%i]\n", i);
 #endif
-            readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand==1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i, k);
+            readal[i] = alignReads2Paths((*heap)->heap[i], strand, &subreadM, &subreadSeq, (strand&1) ? CTpaths : GApaths, refLBound, refRBound, readLBound+i, readRBound+i, k);
         }
     } else {
         setup_alignReads2Paths(readal, *heap, CTpaths, GApaths, refLBound, refRBound, readLBound, readRBound, k);
@@ -910,7 +910,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
         if((*heap)->heap[i]->core.qual < MINMAPQ) continue;
         strand = getStrand((*heap)->heap[i]);
         if(readal[i] == NULL) continue;
-        if(strand==1) countAlignmentsPerPath(readal[i], CTpaths->l, CTcounts);
+        if(strand&1) countAlignmentsPerPath(readal[i], CTpaths->l, CTcounts);
         else countAlignmentsPerPath(readal[i], GApaths->l, GAcounts);
     }
 #ifdef DEBUG
@@ -940,7 +940,7 @@ void realignHeapCore(alignmentHeap **heap, paths *CTpaths, paths *GApaths, char 
         fflush(stderr);
 #endif
         if(bestAl == -1) continue;
-        if(strand&1 && refIndex[0] != bestAl)
+        if((strand&1) && refIndex[0] != bestAl)
             (*heap)->heap[i] = updateAlignment((*heap)->heap[i],
                                                CTal[bestAl],
                                                readLBound[i],

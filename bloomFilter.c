@@ -12,7 +12,6 @@ bf ** bf_init(int32_t width, int kmer) {
     uint32_t n = 10*((width+4*kmer)-1);
     //Number of bits for 10% FP rate=-n/log(0.9)
     uint64_t mask = llrint(-1.0*n/log(0.9));
-//    bf **filt = (bf*) malloc(sizeof(bf*));
     bf **filt = malloc(sizeof(bf*) * MAXLEVELS);
     int i;
     assert(filt);
