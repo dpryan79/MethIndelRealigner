@@ -63,7 +63,7 @@ struct bounds * overlapsRegion(bam1_t *b) {
     return bounds;
 }
 
-void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai, int depth, int nt, int quiet) {
+void processReads(htsFile *fp, bam_hdr_t *hdr, htsFile *of, int k, faidx_t *fai, int depth, int nt, int quiet, int threshold) {
     bam1_t *b = bam_init1();
     struct bounds *bounds;
     alignmentHeap *heap = alignmentHeap_init(depth);
@@ -131,7 +131,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Reached end of alignments\n"); fflush(stderr);
 #endif
-                if(heap->l) realignHeap(heap, k, fai, nt);
+                if(heap->l) realignHeap(heap, k, fai, nt, threshold);
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Last heap realigned\n"); fflush(stderr);
 #endif
@@ -144,7 +144,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] %s is outside the ROI, realigning the heap\n", bam_get_qname(b)); fflush(stderr);
 #endif
-                realignHeap(heap, k, fai, nt);
+                realignHeap(heap, k, fai, nt, threshold);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
             heap = writeHeapUntil(of, hdr, heap, b, fp);
@@ -252,7 +252,7 @@ void realigner_usage() {
 "         used in finding paths through the de Bruijn graph. Lower numbers will\n"
 "         produce more (possibly too many, see the --breadth setting) paths,\n"
 "         though a given alignment is more likely to then align perfectly to it.\n"
-"         The default is 4 and this value must be >0.\n"
+"         The default is 4 and this value must be >0 and not more than 15.\n"
 "--maxInsert INT The maximum insert size that will be looked for. The default is\n"
 "         0, meaning no limit is used. Setting this to your maximum read length\n"
 "         can be useful in repeat regions where there are many misaligned reads.\n"
@@ -284,7 +284,7 @@ int realigner_main(int argc, char *argv[]) {
     gzFile bed;
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 25, quiet = 0;
-    int ROIdepth = 4, nCompThreads = 1, nt = 1, maxLevels;
+    int ROIdepth = 4, nCompThreads = 1, nt = 1, threshold = 4;
     int doIndex = 0;
     uint32_t total = 0;
     MAXBREADTH = 300;
@@ -357,9 +357,9 @@ int realigner_main(int argc, char *argv[]) {
             quiet = 1;
             break;
         case 6 :
-            maxLevels = atoi(optarg);
-            if(maxLevels<1) maxLevels = 1;
-            setMAXLEVELS(maxLevels);
+            threshold = atoi(optarg);
+            if(threshold<1) threshold = 1;
+            if(threshold>15) threshold = 15;
             break;
         case 7:
             doIndex = 1;
@@ -394,7 +394,7 @@ int realigner_main(int argc, char *argv[]) {
         initTargetNodes();
         findInDels(fp, hdr, MINMAPQ, 5);
         total = depthFilter(ROIdepth);
-        fprintf(stderr, "Found %"PRIu32" ROIs\n", total+1);
+        fprintf(stderr, "Found %"PRIu32" ROIs\n", total);
         fflush(stderr);
         bam_hdr_destroy(hdr);
         sam_close(fp);
@@ -423,7 +423,7 @@ int realigner_main(int argc, char *argv[]) {
 
     //Process the reads
     lastTargetNode = firstTargetNode->next;
-    processReads(fp, hdr, of, kmer, fai, depth, nt, quiet);
+    processReads(fp, hdr, of, kmer, fai, depth, nt, quiet, threshold);
 
     //Clean up
     destroyTargetNodes();

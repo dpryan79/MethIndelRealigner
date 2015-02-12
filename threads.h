@@ -16,7 +16,6 @@ pthread_spinlock_t SemiGlobalAlignment_spinlock, SemiGlobalAlignment_finished_sp
 alignmentHeap *GLOBAL_heap;
 int GLOBAL_k, GLOBAL_nt, GLOBAL_len, GLOBAL_finished, *thread_ids;
 int32_t GLOBAL_start, GLOBAL_end;
-bf *GLOBAL_filter;
 char *GLOBAL_CT, *GLOBAL_GA, *GLOBAL_refSeq;
 int8_t *GLOBAL_ref;
 int32_t GLOBAL_refLen, GLOBAL_maxIns, GLOBAL_maxDel, GLOBAL_refIndex;
