@@ -35,5 +35,5 @@ clean:
 clean-all: clean
 	make --directory=htslib clean
 
-install: TargetCreator Realigner
+install: MethIndelRealigner
 	install MethIndelRealigner $(PREFIX)
