@@ -85,5 +85,4 @@ To Do
  - [ ] Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  - [ ] During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
  - [ ] Test memory and speed requirements of just using a hash to store the kmers rather than a bloom filter or count min sketch.
- - [ ] We shouldn't segfault if an option is misspecified (e.g., --q 1 instead of -q 1).
  - [ ] Use hyperloglog or something similar to estimate the number of unique kmers present in the heap.
