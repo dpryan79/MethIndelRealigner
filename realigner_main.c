@@ -301,9 +301,11 @@ int realigner_main(int argc, char *argv[]) {
         {"nt",          1, NULL, 4},
         {"quiet",       0, NULL, 5},
         {"minKmerCount",1, NULL, 6},
-        {"index",       0, NULL, 7}
+        {"index",       0, NULL, 7},
+        {NULL,          0, NULL, 0}
     };
 
+    opterr = 0; //Disable error messages
     while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
@@ -364,18 +366,22 @@ int realigner_main(int argc, char *argv[]) {
         case 7:
             doIndex = 1;
             break;
+        case '?' :
         default :
-            fprintf(stderr, "Invalid option '%c'\n", c);
+            fprintf(stderr, "Invalid option '%s'\n", argv[optind-1]);
             realigner_usage();
             return 1;
+            break;
         }
     }
 
     if(argc == 1) {
+        fprintf(stderr, "A\n");
         realigner_usage();
         return 0;
     }
     if(argc-optind != 3 && argc-optind != 2) {
+        fprintf(stderr, "B\n");
         realigner_usage();
         return 1;
     }

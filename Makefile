@@ -1,7 +1,7 @@
 PREFIX = /home/ryand/bin #This can be changed
 INCLUDE_DIRS = htslib
 CC = gcc
-OPTS = -Wall -g -O3
+OPTS = -Wall -g
 
 OBJS = alignmentHeap.o countMinSketch.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o TargetCreator_main.o realigner_main.o
 VERSION = 0.1.0
