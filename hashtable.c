@@ -21,34 +21,34 @@ hashTable * ht_init(int32_t width, int kmer, int threshold) {
     return ht;
 }
 
-hashTableEntry * ht_makeEntry(char *seq) {
+hashTableEntry * ht_makeEntry(char *seq, int l) {
     hashTableEntry *e = calloc(1, sizeof(hashTableEntry));
     assert(e);
 
     e->cnt = 1;
-    e->seq = strdup(seq);
+    e->seq = strndup(seq, l);
     assert(e->seq);
 
     return e;
 }
 
-hashTableEntry * ht_hasEntry(hashTable *ht, uint64_t h, char *seq) {
+hashTableEntry * ht_hasEntry(hashTable *ht, uint64_t h, char *seq, int len) {
     uint64_t n = h%ht->n;
     hashTableEntry *p = ht->entries[n];
 
     while(p) {
-        if(strcmp(p->seq,seq) == 0) break;
+        if(strncmp(p->seq,seq, len) == 0) break;
         p = p->next;
     }
     return p;
 }
 
 void ht_addEntry(hashTable *ht, uint64_t h, hashTableEntry *e) {
-    uint64_t n = h&ht->n;
+    uint64_t n = h%ht->n;
     hashTableEntry *p = ht->entries[n];
 
     if(!p) {
-        p = e;
+        ht->entries[n] = e;
     } else {
         while(p->next) p=p->next;
         p->next = e;
@@ -58,14 +58,14 @@ void ht_addEntry(hashTable *ht, uint64_t h, hashTableEntry *e) {
 void ht_addIncrement(hashTable *ht, char *seq, int len) {
     uint64_t h = hash_seq(seq, len);
     hashTableEntry *e;
-    e = ht_hasEntry(ht, h, seq);
+    e = ht_hasEntry(ht, h, seq, len);
 
     if(e) {
         if(e->cnt < 0xFF) {
             e->cnt++;
         }
     } else {
-        e = ht_makeEntry(seq);
+        e = ht_makeEntry(seq, len);
         ht_addEntry(ht, h, e);
     }
 }
@@ -73,11 +73,11 @@ void ht_addIncrement(hashTable *ht, char *seq, int len) {
 void ht_addIncrementMax(hashTable *ht, char *seq, int len) {
     uint64_t h = hash_seq(seq, len);
     hashTableEntry *e;
-    e = ht_hasEntry(ht, h, seq);
+    e = ht_hasEntry(ht, h, seq, len);
 
     if(e) e->cnt = 0xFF;
     else {
-        e = ht_makeEntry(seq);
+        e = ht_makeEntry(seq, len);
         e->cnt = 0xFF;
         ht_addEntry(ht, h, e);
     }
@@ -86,7 +86,7 @@ void ht_addIncrementMax(hashTable *ht, char *seq, int len) {
 int ht_sufficientCount(hashTable *ht, char *seq, int len) {
     uint64_t h = hash_seq(seq, len);
     hashTableEntry *e;
-    e = ht_hasEntry(ht, h, seq);
+    e = ht_hasEntry(ht, h, seq, len);
 
     if(!e) return 0;
     if(e->cnt < ht->threshold) return 0;

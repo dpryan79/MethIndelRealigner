@@ -402,7 +402,6 @@ int realigner_main(int argc, char *argv[]) {
         gzclose(bed);
     } else {
         //Run TargetCreator ourselves
-        initTargetNodes();
         findInDels(fp, hdr, MINMAPQ, 5);
         total = depthFilter(ROIdepth);
         fprintf(stderr, "Found %"PRIu32" ROIs\n", total);

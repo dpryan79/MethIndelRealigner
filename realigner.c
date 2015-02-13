@@ -153,6 +153,7 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, hashTable *ht, kstri
     //Grow ks as needed
     if(ks->m < (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1)
         ks_resize(ks, (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1);
+    ks->s[0] = '\0'; //So valgrind doesn't complain
     ks->l = (refEnd-positions[end2])+(end2-start2+1)+(positions[start2]-refStart)+1;
 
     //Add 5' reference sequence
