@@ -214,6 +214,8 @@ void realigner_usage() {
 "\nThe input and output formats will always be the same. So BAM input produces\n"
 "BAM output and CRAM input produces CRAM output.\n"
 "\nOPTIONS\n"
+"-C       Produce results in CRAM format, regardless of whether the input is in\n"
+"         CRAM format or not.\n"
 "-q INT   The minimum MAPQ value to process an alignment in the target creation\n"
 "         step or to realign it in the realignment step. The default is 10.\n"
 "-k INT   The k-mer size to use. If you manually ran the TargetCreator, the\n"
@@ -285,7 +287,7 @@ int realigner_main(int argc, char *argv[]) {
     faidx_t *fai;
     int c, bedSet=0, depth = 1000, kmer = 25, quiet = 0;
     int ROIdepth = 4, nCompThreads = 1, nt = 1, maxLevels;
-    int doIndex = 0;
+    int doIndex = 0, CRAM = 0;
     uint32_t total = 0;
     MAXBREADTH = 300;
     MAXINSERT = 0;
@@ -304,8 +306,11 @@ int realigner_main(int argc, char *argv[]) {
         {"index",       0, NULL, 7}
     };
 
-    while((c = getopt_long(argc, argv, "k:l:D:@:q:d:h", lopts, NULL)) >= 0) {
+    while((c = getopt_long(argc, argv, "Ck:l:D:@:q:d:h", lopts, NULL)) >= 0) {
         switch(c) {
+        case 'C' :
+            CRAM = 1;
+            break;
         case 'h' :
             realigner_usage();
             return 0;
@@ -408,12 +413,13 @@ int realigner_main(int argc, char *argv[]) {
     GLOBAL_FAI = fai;
     if(argc-optind==2) {
         //write to stdout
-        if(fp->is_cram) of = sam_open("-", "wc");
+        if(fp->is_cram || CRAM) of = sam_open("-", "wc");
         else of = sam_open("-", "wb0");
     } else {
-        if(fp->is_cram) of = sam_open(argv[optind+2], "wc");
+        if(fp->is_cram || CRAM) of = sam_open(argv[optind+2], "wc");
         else of = sam_open(argv[optind+2], "wb");
     }
+    hts_set_fai_filename(fp, argv[optind+1]);
     if(nCompThreads>1) hts_set_threads(of, nCompThreads);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
