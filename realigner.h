@@ -48,12 +48,18 @@ struct InDel{
 
 InDel *firstTargetNode, *lastTargetNode;
 
-typedef struct{
+typedef struct hashTableEntry hashTableEntry;
+struct hashTableEntry {
+    char *seq;
+    uint8_t cnt;
+    struct hashTableEntry *next;
+};
+    
+typedef struct {
     int threshold;
-    uint8_t *cnts;
-    uint64_t mask;
-    uint64_t len;
-} cms;
+    uint64_t n;
+    hashTableEntry **entries;
+} hashTable;
 
 //A doubly-linked list node, or a vertex in a graph
 typedef struct vertex vertex;
@@ -167,18 +173,17 @@ uint32_t depthFilter(int depth);
 //graph.c
 //Create a vertex, nchar is set to -1
 //l is the length of seq
-//mask is the bloom filter mask, such that subtracting two hashes doesn't overflow an int64_t
 //This must be destroyed!
-vertex *makeVertex(char *seq, int l, uint64_t mask);
+vertex *makeVertex(char *seq, int l);
 
 //Given a vertex in a doubly-linked list, destroy the entire list
 void destroyDFSLL(vertex *v);
 
-//cms is the count-min sketch, startSeq/endSeq are the sequences of the first/last vertices, k is the k-mer size, finalChar is C or G, if this is a G->a or C->T graph, respectively
+//ht is the hash table, startSeq/endSeq are the sequences of the first/last vertices, k is the k-mer size, finalChar is C or G, if this is a G->a or C->T graph, respectively
 //The output must be destroyed with destroyDFSLL()
-vertex * getCycles(cms *cntMS, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
+vertex * getCycles(hashTable *ht, char *startSeq, char *endSeq, int k, char finalChar, int32_t maxDepth);
 
-paths * getPaths(cms *cntMS, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth);
+paths * getPaths(hashTable *ht, char *startSeq, char *endSeq, vertex **cycles, char finalChar, int32_t maxDepth, int32_t minDepth, int32_t extraBreadth);
 
 void destroyPaths(paths *p);
 
@@ -191,15 +196,16 @@ void alignmentHeap_destroy(alignmentHeap *heap);
 void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int doSort);
 alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, bam1_t *curb, samFile *fp);
 
-//countMinSketch.c
-cms *cms_init(int32_t width, int kmer, int threshold);
-void cms_destroy(cms *cntMS);
-void cms_increment(cms *cntMS, uint64_t hash);
-void cms_max(cms *cntMS, uint64_t hash);
-inline int cms_val(cms *cntMS, uint64_t hash);
-inline int cms_val_sufficient(cms *cntMS, uint64_t hash);
+//hashTable.c
+hashTable *ht_init(int32_t width, int kmer, int threshold);
+void ht_addIncrement(hashTable *ht, char *seq, int len);
+void ht_addIncrementMax(hashTable *ht, char *seq, int len);
+int ht_sufficientCount(hashTable *ht, char *seq, int len);
+uint64_t ht_numEntries(hashTable *ht);
+void ht_destroy(hashTable *ht);
 uint64_t hash_seq(char *seq, int len);
 
+//realign.c
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold);
 
 //needlemanWunsch.c

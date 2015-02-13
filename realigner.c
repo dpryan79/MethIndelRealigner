@@ -111,13 +111,12 @@ int getStrand(bam1_t *b) {
     }
 }
 
-void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, cms **cntMS, kstring_t *ks, char *CT, char *GA, int32_t refLen, int32_t *maxIns, int32_t *maxDel) {
+void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, hashTable *ht, kstring_t *ks, char *CT, char *GA, int32_t refLen, int32_t *maxIns, int32_t *maxDel) {
     int i, start2, end2;
     int offset = (getStrand(b) & 1) ? 0 : 16;
     int32_t *positions = NULL; //Could reuse this like a kstring_t
     int32_t refStart = (start-k>=0) ? start-k : 0;
     int32_t refEnd = refStart+refLen-1;
-    uint64_t h;
 #ifdef DEBUG
     char *tmp = calloc(k+1, sizeof(char));
     fprintf(stderr, "[bam2kmer] endpos is %"PRId32"\n", bam_endpos(b));
@@ -200,16 +199,7 @@ void bam2kmer(bam1_t *b, int k, int32_t start, int32_t end, cms **cntMS, kstring
 #endif
 
     //Add the kmers, ignoring the first and last
-    for(i=1; i<ks->l-k-1; i++) {
-        h = hash_seq(ks->s+i, k);
-#ifdef DEBUG
-        snprintf(tmp, k+1, "%s", ks->s+i);
-        if(offset==0) fprintf(stderr, "[bam2kmer] vertex %s %" PRIu64"\n", tmp, h & cntMS[0]->mask);
-        else fprintf(stderr, "[bam2kmer] vertex %s %" PRIu64"\n", tmp, h & cntMS[1]->mask);
-#endif
-        if(offset==0) cms_increment(cntMS[0], h);
-        else cms_increment(cntMS[1], h);
-    }
+    for(i=1; i<ks->l-k-1; i++) ht_addIncrement(ht, ks->s+i, k);
 
 #ifdef DEBUG
     free(tmp);
@@ -1028,18 +1018,15 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 
 //k is the kmer
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold) {
-    cms *filters[2];
+    hashTable *ht = ht_init(heap->end - heap->start, k, threshold);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     int32_t extraBreadth = 2*(heap->end-heap->start-1);
     char *CT, *GA, *startVertex;
     paths *CTpaths, *GApaths;
     int len;
     vertex *CTcycles = NULL, *GAcycles = NULL;
-    uint64_t h;
     kstring_t *ks = NULL;
-
-    filters[0] = cms_init(heap->end - heap->start, k, threshold);
-    filters[1] = cms_init(heap->end - heap->start, k, threshold);
+    assert(ht);
 
     //Add the reference sequence
     start = (heap->start-k >= 0) ? heap->start-k : 0;
@@ -1061,15 +1048,11 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
 #ifdef DEBUG
         snprintf(tmp, k+1, "%s", CT+i);
         fprintf(stderr, "[realignHeap] CTvertex %s\n", tmp); fflush(stderr);
-#endif
-        h = hash_seq(CT+i, k);
-        cms_max(filters[0], h);
-        h = hash_seq(GA+i, k);
-#ifdef DEBUG
         snprintf(tmp, k+1, "%s", GA+i);
         fprintf(stderr, "[realignHeap] GAvertex %s\n", tmp); fflush(stderr);
 #endif
-        cms_max(filters[1], h);
+        ht_addIncrementMax(ht, CT+i, k);
+        ht_addIncrementMax(ht, GA+i, k);
     }
 
     //Process the reads
@@ -1077,24 +1060,24 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
     assert(ks);
     for(i=0; i<heap->l; i++) {
         if(heap->heap[i]->core.qual < MINMAPQ) continue;
-        bam2kmer(heap->heap[i], k, start, end, filters, ks, CT, GA, len, &maxIns, &maxDel);
+        bam2kmer(heap->heap[i], k, start, end, ht, ks, CT, GA, len, &maxIns, &maxDel);
     }
 
     //Extract the graph paths
     int32_t maxLen = len+maxIns;
     if(MAXINSERT && MAXINSERT < maxIns) maxLen = len+MAXINSERT;
     startVertex = strndup(CT, k);
-    if(NOCYCLES) CTcycles = getCycles(filters[0], startVertex, CT+len-k, k, 'G', maxLen);
+    if(NOCYCLES) CTcycles = getCycles(ht, startVertex, CT+len-k, k, 'G', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, CT+len-k); fflush(stdout);
 #endif
-    CTpaths = getPaths(filters[0], startVertex, CT+len-k, &CTcycles, 'G', maxLen, len-maxDel, extraBreadth);
+    CTpaths = getPaths(ht, startVertex, CT+len-k, &CTcycles, 'G', maxLen, len-maxDel, extraBreadth);
     snprintf(startVertex, (k+1)*sizeof(char), "%s", GA);
-    if(NOCYCLES) GAcycles = getCycles(filters[1], startVertex, GA+len-k, k, 'C', maxLen);
+    if(NOCYCLES) GAcycles = getCycles(ht, startVertex, GA+len-k, k, 'C', maxLen);
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] Going from %s -> %s\n", startVertex, GA+len-k); fflush(stdout);
 #endif
-    GApaths = getPaths(filters[1], startVertex, GA+len-k, &GAcycles, 'C', maxLen, len-maxDel, extraBreadth);
+    GApaths = getPaths(ht, startVertex, GA+len-k, &GAcycles, 'C', maxLen, len-maxDel, extraBreadth);
     free(startVertex);
 
     //Did we get too many paths?
@@ -1120,8 +1103,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
     if(GApaths) destroyPaths(GApaths);
     if(CTcycles) destroyDFSLL(CTcycles);
     if(GAcycles) destroyDFSLL(GAcycles);
-    cms_destroy(filters[0]);
-    cms_destroy(filters[1]);
+    ht_destroy(ht);
     free(CT);
     free(GA);
 }

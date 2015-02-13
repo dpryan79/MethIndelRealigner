@@ -1,10 +1,10 @@
 PREFIX = /home/ryand/bin #This can be changed
 INCLUDE_DIRS = htslib
 CC = gcc
-OPTS = -Wall -g -O3
+OPTS = -Wall -g
 
-OBJS = alignmentHeap.o countMinSketch.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o TargetCreator_main.o realigner_main.o
-VERSION = 0.1.1
+OBJS = alignmentHeap.o hashtable.o graph.o murmur3.o TargetCreator.o realigner.o SemiGlobal.o threads.o TargetCreator_main.o realigner_main.o
+VERSION = 0.1.1HT
 
 #If we're building from a git repo, then append the most recent tag
 ifneq "$(wildcard .git)" ""
