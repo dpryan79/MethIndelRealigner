@@ -131,7 +131,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Reached end of alignments\n"); fflush(stderr);
 #endif
-                if(heap->l) realignHeap(heap, k, fai, nt, threshold);
+                if(heap->l) realignHeap(heap, k, fai, nt, threshold, quiet);
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] Last heap realigned\n"); fflush(stderr);
 #endif
@@ -139,12 +139,12 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
                 heap->l = 0;
                 break;
             } else if(status == 2) {
-                fprintf(stderr, "[processReads] Skipping %s:%"PRId32"-%"PRId32", too many reads\n", hdr->target_name[heap->heap[0]->core.tid], heap->start, heap->end);
+                if(quiet < 2) fprintf(stderr, "[processReads] Skipping %s:%"PRId32"-%"PRId32", too many reads\n", hdr->target_name[heap->heap[0]->core.tid], heap->start, heap->end);
             } else {
 #ifdef DEBUG
                 fprintf(stderr, "[processReads] %s is outside the ROI, realigning the heap\n", bam_get_qname(b)); fflush(stderr);
 #endif
-                realignHeap(heap, k, fai, nt, threshold);
+                realignHeap(heap, k, fai, nt, threshold, quiet);
             }
             lastTargetNode = lastTargetNode->next; //Move to the next ROI
             heap = writeHeapUntil(of, hdr, heap, b, fp);
@@ -166,7 +166,7 @@ inheap:         if(b->core.pos < heap->end && b->core.tid == heap->heap[0]->core
 }
 
 //return -1 on error
-int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
+int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k, int quiet) {
     int ret;
     char *s;
     InDel *node;
@@ -200,7 +200,9 @@ int bed2list(gzFile fp, bam_hdr_t *hdr, int32_t k) {
     if(ks->s) free(ks->s);
     free(ks);
     ks_destroy(kstr);
-    fprintf(stderr, "Found %"PRIu32" ROIs\n", total); fflush(stderr);
+    if(!quiet) {
+        fprintf(stderr, "Found %"PRIu32" ROIs\n", total); fflush(stderr);
+    }
     return 0;
 }
 
@@ -233,6 +235,7 @@ void realigner_usage() {
 "         you need 4 reads supporting an InDel for realignment to occur around\n"
 "         it.\n"
 "--quiet  Suppress printing the ROI (region of interest) that's being processed.\n"
+"         Specifying this twice will suppress everything except error messages.\n"
 "--index  If the output is being written directly to a file (rather than to the\n"
 "         screen), attempt to index it upon completion.\n"
 "\n"
@@ -361,7 +364,7 @@ int realigner_main(int argc, char *argv[]) {
             if(nt<1) nt = 1;
             break;
         case 5 :
-            quiet = 1;
+            quiet += 1;
             break;
         case 6 :
             threshold = atoi(optarg);
@@ -398,15 +401,17 @@ int realigner_main(int argc, char *argv[]) {
     initTargetNodes();
 
     if(bedSet) {
-        assert(bed2list(bed, hdr, kmer) == 0); //This should be better handled
+        assert(bed2list(bed, hdr, kmer, quiet) == 0); //This should be better handled
         gzclose(bed);
     } else {
         //Run TargetCreator ourselves
         initTargetNodes();
         findInDels(fp, hdr, MINMAPQ, 5);
         total = depthFilter(ROIdepth);
-        fprintf(stderr, "Found %"PRIu32" ROIs\n", total);
-        fflush(stderr);
+        if(!quiet) {
+            fprintf(stderr, "Found %"PRIu32" ROIs\n", total);
+            fflush(stderr);
+        }
         bam_hdr_destroy(hdr);
         sam_close(fp);
         //Reopen the input BAM file

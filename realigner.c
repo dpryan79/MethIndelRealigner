@@ -1027,7 +1027,7 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 }
 
 //k is the kmer
-void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold) {
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold, int quiet) {
     cms *filters[2];
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     int32_t extraBreadth = 2*(heap->end-heap->start-1);
@@ -1110,7 +1110,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
             fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", couldn't find any paths post-assembly!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
         }
     } else {
-        fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
+        if(quiet<2) fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
     }
 
     //Clean up

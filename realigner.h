@@ -200,7 +200,7 @@ inline int cms_val(cms *cntMS, uint64_t hash);
 inline int cms_val_sufficient(cms *cntMS, uint64_t hash);
 uint64_t hash_seq(char *seq, int len);
 
-void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold);
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold, int quiet);
 
 //needlemanWunsch.c
 s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartpos);
