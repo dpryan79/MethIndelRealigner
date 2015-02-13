@@ -29,8 +29,11 @@ int TargetCreator_main(int argc, char *argv[]) {
 
     static struct option lopts[] = {
         {"help",     0, NULL, 'h'},
-        {"ROIdepth", 1, NULL, 'd'}};
+        {"ROIdepth", 1, NULL, 'd'},
+        {NULL,       0, NULL,  0 }
+    };
 
+    opterr = 0;
     while((c = getopt_long(argc, argv, "q:f:h", lopts, NULL)) >= 0) {
         switch(c) {
         case 'h' :
@@ -47,7 +50,7 @@ int TargetCreator_main(int argc, char *argv[]) {
             ref = optarg;
             break;
         default :
-            fprintf(stderr, "Invalid option '%c'\n", c);
+            fprintf(stderr, "Invalid option '%s'\n", argv[optind-1]);
             TargetCreator_usage();
             return 1;
         }
