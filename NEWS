@@ -1,0 +1,6 @@
+Version 0.1.1 :
+ * Fixed parsing of the command line arguments. Previously, MethIndelRealigner would segfault if you specified a non-existent option!
+ * Store graph nodes in a count-min sketch rather than a bloom filter. The counter is 4 bits, which allows a minKmerCount of up to 15 without linearly scaling memory needs. There is a separate count-min sketch for each of the strands (OT/CTOT and OB/CTOB). Currently, the size of each count-min sketch is the same as the previous default bloom filter, though this may change in the future.
+
+Version 0.1.0 :
+ * Initial commit

@@ -9,7 +9,7 @@ A set of programs to attempt local methylation-aware realignment around indels. 
 
  2. Tracking the number of alignments supporting a given InDel and using that to filter possible ROIs (regions of interest) where realignment should be performed.
  3. Looping through the input BAM/CRAM file and finding alignments that overlap an ROI.
- 4. The sequence of both the reference and alignments within a 2\*Kmer window centered at the ROI (see for example [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/BigWindowForKmerExample.annotated.png), with K=21) are used to create a de Bruijn graph. A graph of the ROI shown above is available in [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/graph.pdf). The graph starts at the top and proceed through the bottom. Note that there are 6 possible paths through this graph. Blue arrows simply denote paths encountered before during depth first search.
+ 4. The sequence of both the reference and alignments within a 2\*Kmer window centered at the ROI (see for example [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/BigWindowForKmerExample.annotated.png), with K=21) are used to create a de Bruijn graph. A graph of the ROI shown above is available in [here](http://raw.githubusercontent.com/dpryan79/MethIndelRealigner/master/images/graph.pdf). The graph starts at the top and proceed through the bottom. Note that there are 6 possible paths through this graph. Blue arrows simply denote paths encountered before during depth first search. For the sake of memory efficiency, the nodes of the graph are stored in a count-min sketch, with 4 bit counters.
  5. All paths (possibly without cycles, if --noCycles is used) from 2\*Kmer before the ROI to 2\*Kmer are found and alignments covering the ROI are then aligned to these paths.
  6. Each alignment from the BAM/CRAM file is assigned to the path to which it best aligns and to which the maxmimum number of other alignments best aligned (in essence, this is an expectation maximization step wherein all alignments covering an ROI are used to weight the final alignment of each other).
  7. The paths are aligned back to the reference sequence and alignments from the BAM/CRAM file are updated as needed to modify their start positions and CIGAR strings.
@@ -84,5 +84,5 @@ To Do
 =====
  - [ ] Using a bunch of spinlocks seems like a wasteful way to multithread. Perhaps we can chaing wake-up between functions with condition variables.
  - [ ] During graph DFS traversal, only vertices with in-degree >1 need to be tracked. This is similar to a clever memory-saving trick that minia uses. Similarly, switching to a hash would use a little more memory but end up being faster.
- - [ ] Using a count-min sketch would be more memory efficient than a layered bloom filter.
  - [ ] Test memory and speed requirements of just using a hash to store the kmers rather than a bloom filter or count min sketch.
+ - [ ] Use hyperloglog or something similar to estimate the number of unique kmers present in the heap.
