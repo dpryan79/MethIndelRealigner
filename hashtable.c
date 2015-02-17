@@ -9,8 +9,8 @@
 *
 *******************************************************************************/
 
-hashTable * ht_init(int32_t width, int kmer, int threshold) {
-    uint64_t n = 5*(width+4*kmer-1); //A guesstimate of the number of k-mers
+hashTable * ht_init(int32_t nAlignments, int threshold) {
+    uint64_t n = 500+2*((uint64_t) nAlignments);
     hashTable *ht = malloc(sizeof(hashTable));
     assert(ht);
 
@@ -105,6 +105,22 @@ uint64_t ht_numEntries(hashTable *ht) {
         }
     }
     return n;
+}
+
+uint64_t ht_maxDepth(hashTable *ht) {
+    uint64_t i, n, biggestN = 0;
+    hashTableEntry *p;
+
+    for(i=0; i<ht->n; i++) {
+        n = 0;
+        p = ht->entries[i];
+        while(p) {
+            n++;
+            p = p->next;
+        }
+        if(n>biggestN) biggestN = n;
+    }
+    return biggestN;
 }
 
 void ht_destroy(hashTable *ht) {

@@ -15,7 +15,7 @@ endif
 
 .SUFFIXES:.c .o
 
-all: MethIndelRealigner
+all: MethIndelRealignerHT
 
 .c.o:
 	$(CC) -c $(OPTS) -I$(INCLUDE_DIRS) $< -o $@
@@ -26,14 +26,14 @@ version.h:
 htslib: 
 	$(MAKE) -C htslib
 
-MethIndelRealigner: htslib version.h $(OBJS)
-	$(CC) $(OPTS) -I$(INCLUDE_DIRS) $(OBJS) htslib/libhts.a main.c -o MethIndelRealigner -lz -lpthread -lm
+MethIndelRealignerHT: htslib version.h $(OBJS)
+	$(CC) $(OPTS) -I$(INCLUDE_DIRS) $(OBJS) htslib/libhts.a main.c -o MethIndelRealignerHT -lz -lpthread -lm
 
 clean:
-	rm -f *.o MethIndelRealigner
+	rm -f *.o MethIndelRealignerHT
 
 clean-all: clean
 	make --directory=htslib clean
 
-install: MethIndelRealigner
-	install MethIndelRealigner $(PREFIX)
+install: MethIndelRealignerHT
+	install MethIndelRealignerHT $(PREFIX)

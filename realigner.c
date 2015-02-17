@@ -1018,8 +1018,8 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 }
 
 //k is the kmer
-void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold) {
-    hashTable *ht = ht_init(heap->end - heap->start, k, threshold);
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold, int quiet) {
+    hashTable *ht = ht_init(heap->l, threshold);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     int32_t extraBreadth = 2*(heap->end-heap->start-1);
     char *CT, *GA, *startVertex;
@@ -1094,8 +1094,10 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
             fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", couldn't find any paths post-assembly!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
         }
     } else {
-        fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
+        if(quiet<2) fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
     }
+
+//    fprintf(stderr, "%"PRIu64"\t%"PRIu64"\t%"PRId32"\t%"PRId32"\n", ht_numEntries(ht), ht_maxDepth(ht), heap->end - heap->start, heap->l);
 
     //Clean up
     if(ks->s) free(ks->s);

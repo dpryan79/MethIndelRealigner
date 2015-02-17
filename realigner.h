@@ -197,16 +197,17 @@ void writeHeap(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, int doSort);
 alignmentHeap * writeHeapUntil(samFile *of, bam_hdr_t *hdr, alignmentHeap *heap, bam1_t *curb, samFile *fp);
 
 //hashTable.c
-hashTable *ht_init(int32_t width, int kmer, int threshold);
+hashTable *ht_init(int32_t nAlignments, int threshold);
 void ht_addIncrement(hashTable *ht, char *seq, int len);
 void ht_addIncrementMax(hashTable *ht, char *seq, int len);
 int ht_sufficientCount(hashTable *ht, char *seq, int len);
 uint64_t ht_numEntries(hashTable *ht);
+uint64_t ht_maxDepth(hashTable *ht);
 void ht_destroy(hashTable *ht);
 uint64_t hash_seq(char *seq, int len);
 
 //realign.c
-void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold);
+void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold, int quiet);
 
 //needlemanWunsch.c
 s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartpos);
