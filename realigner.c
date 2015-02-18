@@ -1020,6 +1020,7 @@ paths *addRefPath(char *Seq, int len, paths *p) {
 //k is the kmer
 void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold, int quiet) {
     hashTable *ht = ht_init(heap->l, threshold);
+    kmvSketch *kmv = kmv_init(10);
     int32_t i, start, end, start2, maxIns = 0, maxDel = 0;
     int32_t extraBreadth = 2*(heap->end-heap->start-1);
     char *CT, *GA, *startVertex;
@@ -1038,6 +1039,17 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
     GA = strdup(CT);
     convertCT(CT, len);
     convertGA(GA, len);
+
+    //estimate the number of unique k-mers
+    for(i=0; i<len-k+1; i++) {
+        kmv_addSeq(kmv, CT+i, k);
+        kmv_addSeq(kmv, GA+i, k);
+    }
+    for(i=0; i<heap->l; i+=1) {
+        if(heap->heap[i]->core.qual < MINMAPQ) continue;
+        bam2kmerSketch(heap->heap[i], kmv, k, start, end, CT, GA, len);
+    }
+
 #ifdef DEBUG
     fprintf(stderr, "[realignHeap] heap->start %"PRId32" heap->end %"PRId32"\n", heap->start, heap->end);
     fprintf(stderr, "[realignHeap] fetching sequence from %"PRId32"-%"PRId32" of length %i\n", start2, end+k-1,len);
@@ -1097,7 +1109,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
         if(quiet<2) fprintf(stderr, "[realignHeap] Skipping %s:%" PRId32 "-%" PRId32 ", too many paths!\n", faidx_iseq(fai, heap->heap[0]->core.tid), heap->start, heap->end);
     }
 
-//    fprintf(stderr, "%"PRIu64"\t%"PRIu64"\t%"PRId32"\t%"PRId32"\n", ht_numEntries(ht), ht_maxDepth(ht), heap->end - heap->start, heap->l);
+    fprintf(stderr, "%"PRIu64"\t%i\n", ht_numEntries(ht), kmv_estimate(kmv));
 
     //Clean up
     if(ks->s) free(ks->s);
@@ -1107,6 +1119,7 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
     if(CTcycles) destroyDFSLL(CTcycles);
     if(GAcycles) destroyDFSLL(GAcycles);
     ht_destroy(ht);
+    kmv_destroy(kmv);
     free(CT);
     free(GA);
 }

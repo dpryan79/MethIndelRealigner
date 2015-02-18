@@ -212,3 +212,16 @@ void realignHeap(alignmentHeap *heap, int k, faidx_t *fai, int nt, int threshold
 //needlemanWunsch.c
 s_align * GlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int k, int32_t likelyStartpos);
 s_align * SemiGlobalAlignment(int8_t *ref, int32_t refLen, int8_t *path, int32_t pathLen, int32_t k);
+
+typedef struct{
+    int l;
+    uint64_t *vals;
+} kmvSketch;
+
+//kmv.c
+kmvSketch * kmv_init(int l);
+void kmv_addSeq(kmvSketch *kmv, char *seq, int l);
+int kmv_estimate(kmvSketch *kmv);
+void kmv_destroy(kmvSketch *kmv);
+void bam2kmerSketch(bam1_t *b, kmvSketch *kmv, int k, int32_t start, int32_t end, char *CT, char *GA, int32_t refLen);
+
