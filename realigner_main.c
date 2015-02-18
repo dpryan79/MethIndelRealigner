@@ -431,6 +431,7 @@ int realigner_main(int argc, char *argv[]) {
         else of = sam_open(argv[optind+2], "wb");
     }
     hts_set_fai_filename(fp, argv[optind+1]);
+    hts_set_fai_filename(of, argv[optind+1]);
     if(nCompThreads>1) hts_set_threads(of, nCompThreads);
     sam_hdr_write(of, hdr);
     GLOBAL_HEADER = hdr;
