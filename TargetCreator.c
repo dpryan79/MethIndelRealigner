@@ -88,8 +88,7 @@ void mergeNodes(InDel *node, int k) {
         while(TargetNodeCmp(lastTargetNode, nextNode, k) == 0) {
             lastTargetNode->end = (lastTargetNode->end < nextNode->end) ? nextNode->end : lastTargetNode->end;
             lastTargetNode->count = (lastTargetNode->count + nextNode->count > lastTargetNode->count) ? lastTargetNode->count + nextNode->count : lastTargetNode->count;
-            lastTargetNode->next = nextNode->next;
-            destroyNode(nextNode);
+            removeNode(nextNode);
             nextNode = lastTargetNode->next;
             if(nextNode == NULL) break;
         }
